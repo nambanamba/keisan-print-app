@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>理科 今日の計算問題</title>
+<style>
+  :root{
+    --primary:#1d4ed8; --primary-dark:#1e3a8a; --ink:#1f2937; --ink-soft:#64748b;
+    --bg:#f8fafc; --card-bg:#ffffff; --border:#cbd5e1; --radius:10px;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic","Meiryo",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5; padding-bottom:60px;
+  }
+  header{ background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; padding:16px; text-align:center; }
+  header h1{ font-size:1.2rem; font-weight:700; }
+  header p{ font-size:0.8rem; opacity:0.9; margin-top:2px; }
+  .container{ max-width:720px; margin:0 auto; padding:14px; }
+  .card{
+    background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius);
+    padding:16px; margin-bottom:16px; box-shadow:0 2px 4px rgba(0,0,0,0.04);
+  }
+  .section-title{ font-size:0.88rem; font-weight:700; margin:14px 0 8px; color:#334155; }
+  .section-title:first-child{ margin-top:0; }
+  .range-row{ display:flex; align-items:center; gap:8px; }
+  .range-input{
+    flex:1; border:1.5px solid var(--border); border-radius:8px; padding:10px; font-size:1rem;
+    text-align:center;
+  }
+  .range-sep{ font-weight:700; color:var(--ink-soft); }
+  .clear-link{ font-size:0.8rem; color:var(--primary); cursor:pointer; margin-top:6px; display:inline-block; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{ padding:7px 14px; border-radius:16px; border:1px solid var(--border); background:#fff; font-size:0.85rem; font-weight:600; cursor:pointer; }
+  .chip.active{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .count-custom-box{ display:flex; align-items:center; gap:6px; background:#fff; border:1.5px solid var(--border); border-radius:8px; padding:4px 10px; margin-top:8px; }
+  .count-input{ width:60px; border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-size:1rem; font-weight:700; text-align:center; }
+  .error-note{ color:#dc2626; font-size:0.85rem; margin-top:8px; min-height:1.2em; }
+  .btn-main{
+    width:100%; padding:15px; font-size:1.05rem; font-weight:800; color:#fff; background:var(--primary);
+    border:none; border-radius:var(--radius); cursor:pointer; margin-top:10px;
+    box-shadow:0 4px 10px rgba(37,99,235,0.3);
+  }
+  .btn-main:hover{ background:var(--primary-dark); }
+  .btn-secondary{
+    width:100%; padding:12px; font-size:0.95rem; font-weight:700; color:var(--primary-dark);
+    background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:var(--radius); cursor:pointer; margin-top:10px;
+  }
+  .btn-back{ font-size:0.85rem; color:var(--ink-soft); cursor:pointer; margin-bottom:10px; display:inline-block; }
+  .counter{ font-size:0.85rem; color:var(--ink-soft); text-align:right; margin-bottom:8px; }
+  .progress-bar{ background:#e2e8f0; border-radius:8px; height:8px; overflow:hidden; margin-bottom:14px; }
+  .progress-fill{ background:#16a34a; height:100%; width:0%; transition:width .3s ease; }
+  .unit-tag{ display:inline-block; font-size:0.78rem; font-weight:700; color:var(--primary-dark); background:#eff6ff; padding:3px 8px; border-radius:6px; margin-bottom:8px; }
+  .source-tag{ display:block; font-size:0.72rem; color:var(--ink-soft); margin-bottom:6px; }
+  .q-img{ max-width:100%; border-radius:8px; margin-bottom:12px; cursor:zoom-in; }
+  .q-text{ font-size:1.05rem; line-height:1.8; margin-bottom:14px; white-space:pre-wrap; }
+  .a-block{ display:none; border-top:1px dashed var(--border); padding-top:12px; margin-top:12px; }
+  .a-block.show{ display:block; }
+  .a-label{ font-size:0.78rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px; }
+  .a-text{ font-size:1.1rem; font-weight:700; color:var(--primary-dark); margin-bottom:10px; }
+  .sol-text{ font-size:0.9rem; line-height:1.8; color:#334155; white-space:pre-wrap; }
+
+  #print-region{ display:none; }
+  @page{ size:A4 portrait; margin:0; }
+  @media print{
+    body{ margin:0 !important; background:#fff !important; }
+    header, .container{ display:none !important; }
+    #print-region{ display:block !important; padding:16mm 14mm; box-sizing:border-box; }
+    .print-q{ margin-bottom:22px; break-inside:avoid; }
+    .print-q .print-q-head{ font-size:13px; font-weight:700; margin-bottom:8px; }
+    .print-q .print-q-text{ font-size:14px; line-height:1.8; margin-bottom:8px; white-space:pre-wrap; }
+    .print-q img{ max-width:100%; max-height:70mm; display:block; margin-bottom:8px; }
+    .print-scratch{ border:1px solid #999; min-height:26mm; border-radius:4px; }
+    .print-q .print-a-text{ font-size:14px; line-height:1.8; font-weight:700; }
+    .print-q .print-sol-text{ white-space:pre-wrap; font-size:12.5px; line-height:1.8; color:#333; margin-top:4px; }
+  }
+
+  .lightbox-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:100;
+    align-items:center; justify-content:center;
+  }
+  .lightbox-overlay.show{ display:flex; }
+  .lightbox-overlay img{ max-width:92vw; max-height:88vh; }
+  .lightbox-close{
+    position:absolute; top:14px; right:18px; color:#fff; font-size:30px; background:none; border:none; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧮 理科 今日の計算問題</h1>
+  <p>回の範囲・問題数を決めて解く／印刷する</p>
+</header>
+
+<div class="container">
+
+  <!-- 設定画面 -->
+  <div id="screen-setup">
+    <div class="card">
+      <div class="section-title">回の範囲（例：1〜2、空欄で全範囲）</div>
+      <div class="range-row">
+        <input type="number" id="kai-from" class="range-input" min="1" placeholder="第 何回から">
+        <span class="range-sep">〜</span>
+        <input type="number" id="kai-to" class="range-input" min="1" placeholder="第 何回まで">
+      </div>
+      <span class="clear-link" id="kai-clear">クリア（全範囲）</span>
+
+      <div class="section-title">問題数</div>
+      <div class="chip-row" id="count-chips">
+        <div class="chip" data-count="5">5問</div>
+        <div class="chip active" data-count="10">10問</div>
+        <div class="chip" data-count="20">20問</div>
+      </div>
+      <div class="count-custom-box">
+        <label for="count-custom-input" style="font-size:0.82rem;color:#475569;font-weight:600;">自由入力:</label>
+        <input type="number" id="count-custom-input" class="count-input" min="1" max="200">
+        <span style="font-size:0.82rem;color:#475569;">問</span>
+      </div>
+
+      <div class="error-note" id="setup-error"></div>
+
+      <button class="btn-main" id="start-btn">計算問題を始める</button>
+      <button class="btn-secondary" id="print-problems-btn">🖨️ 問題を印刷する</button>
+      <button class="btn-secondary" id="print-answers-btn">📄 解答・解説を印刷する</button>
+    </div>
+  </div>
+
+  <!-- 練習画面 -->
+  <div id="screen-practice" style="display:none;">
+    <span class="btn-back" id="back-link">← やめてもどる</span>
+    <div class="counter" id="counter">1 / 10</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="card">
+      <span class="unit-tag" id="unit-tag"></span>
+      <span class="source-tag" id="source-tag"></span>
+      <img class="q-img" id="q-img" style="display:none;" alt="資料">
+      <div class="q-text" id="q-text"></div>
+      <div class="a-block" id="a-block">
+        <div class="a-label">こたえ</div>
+        <div class="a-text" id="a-text"></div>
+        <div class="a-label" id="sol-label" style="margin-top:10px;">かいせつ</div>
+        <div class="sol-text" id="sol-text"></div>
+      </div>
+    </div>
+    <button class="btn-main" id="reveal-btn">こたえを見る</button>
+    <button class="btn-main" id="next-btn" style="display:none;">つぎへ</button>
+  </div>
+
+</div>
+
+<div id="print-region"></div>
+
+<div class="lightbox-overlay" id="lightbox-overlay">
+  <button class="lightbox-close" id="lightbox-close">×</button>
+  <img id="lightbox-img" src="" alt="資料（拡大）">
+</div>
+
+<script src="data.js"></script>
+<script>
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function getQ(idx){ return QA_DATA[idx]; }
+
+let calcQueue = [];
+let calcPos = 0;
+let calcCount = 10;
+
+function buildCalcPool(kaiFrom, kaiTo){
+  let pool = [];
+  QA_DATA.forEach((d,i)=>{
+    if(kaiFrom && d.kai < kaiFrom) return;
+    if(kaiTo && d.kai > kaiTo) return;
+    pool.push(i);
+  });
+  return pool;
+}
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+const els = {};
+["kai-from","kai-to","kai-clear","count-chips","count-custom-input","setup-error",
+ "start-btn","print-problems-btn","print-answers-btn","screen-setup","screen-practice",
+ "back-link","counter","progress-fill","unit-tag","source-tag","q-img","q-text",
+ "a-block","a-text","sol-label","sol-text","reveal-btn","next-btn",
+ "lightbox-overlay","lightbox-close","lightbox-img"
+].forEach(id => els[id] = document.getElementById(id));
+
+els["kai-clear"].addEventListener("click", ()=>{
+  els["kai-from"].value = "";
+  els["kai-to"].value = "";
+});
+
+document.querySelectorAll("#count-chips .chip").forEach(el=>{
+  el.addEventListener("click", ()=>{
+    calcCount = parseInt(el.dataset.count, 10);
+    document.querySelectorAll("#count-chips .chip").forEach(c=>c.classList.remove("active"));
+    el.classList.add("active");
+    els["count-custom-input"].value = "";
+  });
+});
+els["count-custom-input"].addEventListener("change", ()=>{
+  let v = parseInt(els["count-custom-input"].value, 10);
+  if(isNaN(v) || v < 1) v = 1;
+  calcCount = v;
+  els["count-custom-input"].value = v;
+  document.querySelectorAll("#count-chips .chip").forEach(c=>c.classList.remove("active"));
+});
+
+function readRange(){
+  const fromV = parseInt(els["kai-from"].value, 10);
+  const toV = parseInt(els["kai-to"].value, 10);
+  return { kaiFrom: isNaN(fromV) ? null : fromV, kaiTo: isNaN(toV) ? null : toV };
+}
+function currentCalcQueue(){
+  const {kaiFrom, kaiTo} = readRange();
+  const pool = buildCalcPool(kaiFrom, kaiTo);
+  if(pool.length === 0){
+    els["setup-error"].textContent = "この範囲に計算問題がありません。範囲を広げてください。";
+    return null;
+  }
+  els["setup-error"].textContent = "";
+  return shuffleArray(pool).slice(0, calcCount);
+}
+
+els["start-btn"].addEventListener("click", ()=>{
+  const queue = currentCalcQueue();
+  if(!queue) return;
+  calcQueue = queue;
+  calcPos = 0;
+  startCalcCard();
+  els["screen-setup"].style.display = "none";
+  els["screen-practice"].style.display = "block";
+});
+
+function startCalcCard(){
+  const idx = calcQueue[calcPos];
+  const d = getQ(idx);
+  els["unit-tag"].textContent = d.u;
+  els["source-tag"].textContent = d.note ? "出典："+d.note : "";
+  els["q-text"].textContent = d.q;
+  els["a-text"].textContent = d.a;
+  els["sol-text"].textContent = d.sol || "";
+  els["sol-label"].style.display = d.sol ? "block" : "none";
+  if(d.img){
+    els["q-img"].src = "images/"+d.img;
+    els["q-img"].style.display = "block";
+  }else{
+    els["q-img"].style.display = "none";
+  }
+  els["a-block"].classList.remove("show");
+  els["reveal-btn"].style.display = "block";
+  els["next-btn"].style.display = "none";
+  els["counter"].textContent = (calcPos+1)+" / "+calcQueue.length;
+  els["progress-fill"].style.width = (calcPos/calcQueue.length*100)+"%";
+}
+
+els["reveal-btn"].addEventListener("click", ()=>{
+  els["a-block"].classList.add("show");
+  els["reveal-btn"].style.display = "none";
+  els["next-btn"].style.display = "block";
+});
+els["next-btn"].addEventListener("click", ()=>{
+  calcPos++;
+  if(calcPos >= calcQueue.length){
+    alert("全"+calcQueue.length+"問おわりました。");
+    els["screen-practice"].style.display = "none";
+    els["screen-setup"].style.display = "block";
+  }else{
+    startCalcCard();
+  }
+});
+els["back-link"].addEventListener("click", ()=>{
+  if(!confirm("今日の計算問題をやめてもどりますか？")) return;
+  els["screen-practice"].style.display = "none";
+  els["screen-setup"].style.display = "block";
+});
+els["q-img"].addEventListener("click", ()=>{
+  if(els["q-img"].src) openLightbox(els["q-img"].src);
+});
+
+function openLightbox(src){
+  els["lightbox-img"].src = src;
+  els["lightbox-overlay"].classList.add("show");
+}
+function closeLightbox(){
+  els["lightbox-overlay"].classList.remove("show");
+  els["lightbox-img"].src = "";
+}
+els["lightbox-close"].addEventListener("click", closeLightbox);
+els["lightbox-overlay"].addEventListener("click", (e)=>{ if(e.target === els["lightbox-overlay"]) closeLightbox(); });
+
+// ---- 印刷 ----
+function printProblemHtml(d, no){
+  let html = '<div class="print-q">';
+  html += '<div class="print-q-head">No.'+no+'　'+escapeHtml(d.u)+'</div>';
+  if(d.img) html += '<img src="images/'+escapeHtml(d.img)+'" alt="資料">';
+  html += '<div class="print-q-text">'+escapeHtml(d.q)+'</div>';
+  html += '<div class="print-scratch"></div>';
+  html += '</div>';
+  return html;
+}
+function printAnswerHtml(d, no){
+  let html = '<div class="print-q">';
+  html += '<div class="print-q-head">No.'+no+'　'+escapeHtml(d.u)+(d.note ? '　（'+escapeHtml(d.note)+'）' : '')+'</div>';
+  if(d.img) html += '<img src="images/'+escapeHtml(d.img)+'" alt="資料">';
+  html += '<div class="print-q-text">'+escapeHtml(d.q)+'</div>';
+  html += '<div class="print-a-text">こたえ：'+escapeHtml(d.a)+'</div>';
+  if(d.sol) html += '<div class="print-sol-text">'+escapeHtml(d.sol)+'</div>';
+  html += '</div>';
+  return html;
+}
+function waitForPrintImages(){
+  const imgs = Array.from(document.getElementById("print-region").querySelectorAll("img"));
+  return Promise.all(imgs.map(img=>{
+    if(img.complete) return Promise.resolve();
+    return new Promise(resolve=>{
+      img.addEventListener("load", resolve, {once:true});
+      img.addEventListener("error", resolve, {once:true});
+    });
+  }));
+}
+els["print-problems-btn"].addEventListener("click", async ()=>{
+  const queue = calcQueue.length ? calcQueue : currentCalcQueue();
+  if(!queue) return;
+  calcQueue = queue;
+  document.getElementById("print-region").innerHTML = calcQueue.map((idx,i)=> printProblemHtml(getQ(idx), i+1)).join("");
+  await waitForPrintImages();
+  window.print();
+});
+els["print-answers-btn"].addEventListener("click", async ()=>{
+  const queue = calcQueue.length ? calcQueue : currentCalcQueue();
+  if(!queue) return;
+  calcQueue = queue;
+  document.getElementById("print-region").innerHTML = calcQueue.map((idx,i)=> printAnswerHtml(getQ(idx), i+1)).join("");
+  await waitForPrintImages();
+  window.print();
+});
+</script>
+</body>
+</html>
