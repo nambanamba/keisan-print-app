@@ -27,7 +27,8 @@
   .section-title:first-child{ margin-top:0; }
   .range-row{ display:flex; align-items:center; gap:8px; }
   .range-input{
-    flex:1; border:1.5px solid var(--border); border-radius:8px; padding:10px; font-size:1rem;
+    flex:1; min-width:0; width:100%;
+    border:1.5px solid var(--border); border-radius:8px; padding:10px; font-size:1rem;
     text-align:center;
   }
   .range-sep{ font-weight:700; color:var(--ink-soft); }
@@ -382,7 +383,8 @@ function startCalcCard(){
   }else{
     const c = getQ(ctxIdx);
     els["ctx-text"].textContent = c.q;
-    if(c.img){
+    // 同じ図なら下の問題側で出るので、ここでは重ねて出さない
+    if(c.img && c.img !== d.img){
       els["ctx-img"].src = "images/" + c.img;
       els["ctx-img"].style.display = "block";
     }else{
@@ -512,12 +514,13 @@ els["lightbox-close"].addEventListener("click", closeLightbox);
 els["lightbox-overlay"].addEventListener("click", (e)=>{ if(e.target === els["lightbox-overlay"]) closeLightbox(); });
 
 // ---- 印刷 ----
-function printContextHtml(ctxIdx){
+function printContextHtml(ctxIdx, d){
   if(ctxIdx === null) return "";
   const c = getQ(ctxIdx);
   let html = '<div class="print-ctx">';
   html += '<div class="print-ctx-label">【前の問題】ここまでの条件</div>';
-  if(c.img) html += '<img src="images/'+escapeHtml(c.img)+'" alt="前の問題の資料">';
+  // 同じ図なら問題側で出るので、紙のうえで二重に刷らない
+  if(c.img && c.img !== d.img) html += '<img src="images/'+escapeHtml(c.img)+'" alt="前の問題の資料">';
   html += '<div class="print-ctx-text">'+escapeHtml(c.q)+'</div>';
   html += '</div>';
   return html;
@@ -525,7 +528,7 @@ function printContextHtml(ctxIdx){
 function printProblemHtml(d, no, ctxIdx){
   let html = '<div class="print-q">';
   html += '<div class="print-q-head">No.'+no+'　'+escapeHtml(d.u)+'</div>';
-  html += printContextHtml(ctxIdx);
+  html += printContextHtml(ctxIdx, d);
   if(d.img) html += '<img src="images/'+escapeHtml(d.img)+'" alt="資料">';
   html += '<div class="print-q-text">'+escapeHtml(d.q)+'</div>';
   html += '<div class="print-scratch"></div>';
@@ -535,7 +538,7 @@ function printProblemHtml(d, no, ctxIdx){
 function printAnswerHtml(d, no, ctxIdx){
   let html = '<div class="print-q">';
   html += '<div class="print-q-head">No.'+no+'　'+escapeHtml(d.u)+(d.note ? '　（'+escapeHtml(d.note)+'）' : '')+'</div>';
-  html += printContextHtml(ctxIdx);
+  html += printContextHtml(ctxIdx, d);
   if(d.img) html += '<img src="images/'+escapeHtml(d.img)+'" alt="資料">';
   html += '<div class="print-q-text">'+escapeHtml(d.q)+'</div>';
   html += '<div class="print-a-text">こたえ：'+escapeHtml(d.a)+'</div>';
