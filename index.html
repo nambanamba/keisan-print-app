@@ -96,7 +96,9 @@
     .print-q{ margin-bottom:22px; break-inside:avoid; }
     .print-q .print-q-head{ font-size:13px; font-weight:700; margin-bottom:8px; }
     .print-q .print-q-text{ font-size:14px; line-height:1.8; margin-bottom:8px; white-space:pre-wrap; }
-    .print-q img{ max-width:100%; max-height:70mm; display:block; margin-bottom:8px; }
+    /* 図はページ全体の切り出しになったので、幅いっぱいで刷る（70mm制限だと読めない） */
+    .print-group-fig img{ width:100%; height:auto; display:block; }
+    .print-q img{ width:100%; height:auto; display:block; margin-bottom:8px; }
     .print-scratch{ border:1px solid #999; min-height:26mm; border-radius:4px; }
     .print-q .print-a-text{ font-size:14px; line-height:1.8; font-weight:700; }
     .print-q .print-sol-text{ white-space:pre-wrap; font-size:12.5px; line-height:1.8; color:#333; margin-top:4px; }
