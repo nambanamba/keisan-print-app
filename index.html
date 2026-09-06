@@ -35,6 +35,7 @@
   .chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
   .chip{ padding:7px 14px; border-radius:16px; border:1px solid var(--border); background:#fff; font-size:0.85rem; font-weight:600; cursor:pointer; }
   .chip.active{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .order-note{ font-size:0.78rem; color:var(--ink-soft); margin-top:8px; line-height:1.6; }
   .count-custom-box{ display:flex; align-items:center; gap:6px; background:#fff; border:1.5px solid var(--border); border-radius:8px; padding:4px 10px; margin-top:8px; }
   .count-input{ width:60px; border:1px solid var(--border); border-radius:6px; padding:4px 6px; font-size:1rem; font-weight:700; text-align:center; }
   .error-note{ color:#dc2626; font-size:0.85rem; margin-top:8px; min-height:1.2em; }
@@ -115,6 +116,7 @@
         <div class="chip active" data-count="10">10問</div>
         <div class="chip" data-count="20">20問</div>
       </div>
+      <div class="order-note">テキストの掲載順に、範囲の先頭から出題します（ランダムではありません）</div>
       <div class="count-custom-box">
         <label for="count-custom-input" style="font-size:0.82rem;color:#475569;font-weight:600;">自由入力:</label>
         <input type="number" id="count-custom-input" class="count-input" min="1" max="200">
@@ -170,6 +172,8 @@ let calcQueue = [];
 let calcPos = 0;
 let calcCount = 10;
 
+// QA_DATAはテキスト（回→ページ→問番号）の掲載順に並んでいるので、
+// その並び順のまま添字を集める。シャッフルはしない。
 function buildCalcPool(kaiFrom, kaiTo){
   let pool = [];
   QA_DATA.forEach((d,i)=>{
@@ -178,14 +182,6 @@ function buildCalcPool(kaiFrom, kaiTo){
     pool.push(i);
   });
   return pool;
-}
-function shuffleArray(arr){
-  const a = arr.slice();
-  for(let i=a.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [a[i],a[j]] = [a[j],a[i]];
-  }
-  return a;
 }
 
 const els = {};
@@ -230,7 +226,9 @@ function currentCalcQueue(){
     return null;
   }
   els["setup-error"].textContent = "";
-  return shuffleArray(pool).slice(0, calcCount);
+  // 掲載順のまま先頭から指定問数ぶん。親問（リード文・条件）が
+  // 子問より必ず先に来るようにするため、順序は入れ替えない。
+  return pool.slice(0, calcCount);
 }
 
 els["start-btn"].addEventListener("click", ()=>{
