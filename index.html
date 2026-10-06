@@ -150,9 +150,9 @@
 
   @media print{
     /* 今日のプリント: 計算のスペースを広く。1枚目の右上に時間の欄 */
-    .daily-print .print-scratch{ min-height:26mm; }
-    /* 紙を減らすため、図は高さを抑えて、1ページに2問ほど入るようにする（幅はそのぶん狭くなる） */
-    .daily-print .print-group-fig img, .daily-print .print-q img{ width:auto; max-width:100%; max-height:52mm; }
+    .daily-print .print-scratch{ min-height:50mm; }
+    /* 図は高さ85mmまで（ユーザー「広めで」）。1ページに入れば2問、入らなければ次のページ（自動） */
+    .daily-print .print-group-fig img, .daily-print .print-q img{ width:auto; max-width:100%; max-height:85mm; }
     .daily-print .print-group{ margin-bottom:10px; }
     .daily-print .print-q{ margin-bottom:12px; }
     .daily-print .print-q .print-q-text{ margin-bottom:6px; }
