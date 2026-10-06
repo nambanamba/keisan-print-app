@@ -150,9 +150,17 @@
 
   @media print{
     /* 今日のプリント: 計算のスペースを広く。1枚目の右上に時間の欄 */
-    .daily-print .print-scratch{ min-height:58mm; }
-    /* 縦に長い図でページが空かないよう、図は高さを抑える（幅はそのぶん狭くなる） */
-    .daily-print .print-group-fig img, .daily-print .print-q img{ width:auto; max-width:100%; max-height:100mm; }
+    .daily-print .print-scratch{ min-height:26mm; }
+    /* 紙を減らすため、図は高さを抑えて、1ページに2問ほど入るようにする（幅はそのぶん狭くなる） */
+    .daily-print .print-group-fig img, .daily-print .print-q img{ width:auto; max-width:100%; max-height:52mm; }
+    .daily-print .print-group{ margin-bottom:10px; }
+    .daily-print .print-q{ margin-bottom:12px; }
+    .daily-print .print-q .print-q-text{ margin-bottom:6px; }
+    .daily-print .print-header{ margin-bottom:10px; }
+    /* 答えのページは、さらに詰める */
+    .daily-print .print-answers .print-group-fig img, .daily-print .print-answers .print-q img{ max-height:42mm; }
+    .daily-print .print-answers .print-q{ margin-bottom:8px; }
+    .daily-print .print-answers .print-group{ margin-bottom:6px; }
     .daily-print .print-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
     .daily-print .print-time{ font-size:13px; font-weight:700; white-space:nowrap; text-align:right; line-height:2; }
     .daily-print .print-time .tm{ display:inline-block; min-width:16mm; border-bottom:1px solid #333; margin:0 2px; }
