@@ -87,6 +87,26 @@
   .a-text{ font-size:1.1rem; font-weight:700; color:var(--primary-dark); margin-bottom:10px; }
   .sol-text{ font-size:0.9rem; line-height:1.8; color:#334155; white-space:pre-wrap; }
 
+
+  /* ---- 今日のプリント（毎日の紙と丸付け） ---- */
+  .daily-card{ border:2px solid var(--primary); }
+  .daily-note{ font-size:0.8rem; color:var(--ink-soft); line-height:1.6; margin-top:6px; }
+  .mk-sheet{ border:1px solid var(--border); border-radius:var(--radius); margin-bottom:12px; background:#fff; }
+  .mk-sheet > summary{ padding:11px 12px; font-weight:700; font-size:0.92rem; cursor:pointer; }
+  .mk-row{ padding:10px 12px; border-top:1px solid #e2e8f0; }
+  .mk-head{ font-size:0.74rem; color:var(--ink-soft); }
+  .mk-q{ font-size:0.88rem; line-height:1.6; margin:2px 0 8px; }
+  .mk-btns{ display:flex; gap:8px; }
+  .mk-btn{ flex:1; padding:12px 0; font-size:1.2rem; font-weight:700; border-radius:10px; border:2px solid var(--border); background:#fff; cursor:pointer; }
+  .mk-btn.on[data-r="◎"]{ background:#16a34a; color:#fff; border-color:#16a34a; }
+  .mk-btn.on[data-r="△"]{ background:#f59e0b; color:#fff; border-color:#f59e0b; }
+  .mk-btn.on[data-r="✕"]{ background:#e11d48; color:#fff; border-color:#e11d48; }
+  .send-box{ border-top:1px dashed var(--border); margin-top:14px; padding-top:10px; }
+  .send-input{ width:100%; border:1.5px solid var(--border); border-radius:8px; padding:9px; font-size:0.9rem; }
+  .send-status{ font-size:0.78rem; color:var(--ink-soft); margin-top:6px; line-height:1.6; }
+  .send-auth-warn{ display:none; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; border-radius:8px; padding:8px; font-size:0.8rem; margin-top:8px; }
+  .daily-print-only{ display:none; }
+
   #print-region{ display:none; }
   @page{ size:A4 portrait; margin:0; }
   @media print{
@@ -127,6 +147,17 @@
   .lightbox-close{
     position:absolute; top:14px; right:18px; color:#fff; font-size:30px; background:none; border:none; cursor:pointer;
   }
+
+  @media print{
+    /* 今日のプリント: 計算のスペースを広く。1枚目の右上に時間の欄 */
+    .daily-print .print-scratch{ min-height:58mm; }
+    /* 縦に長い図でページが空かないよう、図は高さを抑える（幅はそのぶん狭くなる） */
+    .daily-print .print-group-fig img, .daily-print .print-q img{ width:auto; max-width:100%; max-height:100mm; }
+    .daily-print .print-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .daily-print .print-time{ font-size:13px; font-weight:700; white-space:nowrap; text-align:right; line-height:2; }
+    .daily-print .print-time .tm{ display:inline-block; min-width:16mm; border-bottom:1px solid #333; margin:0 2px; }
+    .daily-print .print-answers{ break-before:page; }
+  }
 </style>
 </head>
 <body>
@@ -141,8 +172,34 @@
 
   <!-- 設定画面 -->
   <div id="screen-setup">
+
+    <!-- ★今日のプリント（毎日の紙と丸付け。2026-10-07） -->
+    <div class="card daily-card" id="daily-card">
+      <div class="section-title">📄 今日のプリント（苦手な計算を数問・紙で）</div>
+      <div class="chip-row" id="daily-count-chips">
+        <div class="chip" data-n="3">3問</div>
+        <div class="chip active" data-n="4">4問</div>
+        <div class="chip" data-n="5">5問</div>
+        <div class="chip" data-n="6">6問</div>
+      </div>
+      <div class="daily-note" id="daily-plan-note"></div>
+      <div class="daily-note" id="daily-today-note"></div>
+      <button class="btn-main" id="daily-print-btn">🖨️ 今日のプリントを印刷する</button>
+      <button class="btn-secondary" id="daily-redo-btn" style="display:none;">今日のぶんを選び直す（別の問題で作る）</button>
+      <button class="btn-secondary" id="daily-marks-btn">◎をつける（印刷した回の丸付け）</button>
+      <div class="send-auth-warn" id="send-auth-warn">記録の送り先の鍵を作り直してください（期限切れなどで送れていません。記録は端末にためてあります）</div>
+      <div class="send-box" id="send-box">
+        <div class="section-title">記録の送り先（親向け）</div>
+        <input type="password" class="send-input" id="send-token" placeholder="鍵（github_pat_…）を貼る。空にして保存すると送らない" autocomplete="off">
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" id="send-save-btn">保存</button>
+          <button type="button" class="btn-secondary" id="send-test-btn">ためしに送る</button>
+        </div>
+        <div class="send-status" id="send-status"></div>
+      </div>
+    </div>
     <div class="card">
-      <div class="section-title">回の範囲（例：1〜2、空欄で全範囲）</div>
+      <div class="section-title">いままでの使い方：回の範囲（例：1〜2、空欄で全範囲）</div>
       <div class="range-row">
         <input type="number" id="kai-from" class="range-input" min="1" placeholder="第 何回から">
         <span class="range-sep">〜</span>
@@ -213,6 +270,16 @@
     <div class="btn-row" id="judge-row" style="display:none;">
       <button class="btn-main btn-ok" id="ok-btn">⭕ できた</button>
       <button class="btn-main btn-ng" id="ng-btn">❌ できなかった</button>
+    </div>
+  </div>
+
+  <!-- ◎をつける画面 -->
+  <div id="screen-marks" style="display:none;">
+    <span class="btn-back" id="marks-back-link">← もどる</span>
+    <div class="card">
+      <div class="section-title">◎をつける（◎ できた　△ おしい　✕ できなかった）</div>
+      <div class="daily-note">押すとその場で保存します。印刷した回ごとに出ています。</div>
+      <div id="marks-body"></div>
     </div>
   </div>
 
@@ -485,8 +552,10 @@ function backToSetup(){
   calcPos = 0;
   els["screen-practice"].style.display = "none";
   els["screen-list"].style.display = "none";
+  document.getElementById("screen-marks").style.display = "none";
   els["screen-setup"].style.display = "block";
   refreshStatLine();
+  if(typeof dailyRefresh === "function") dailyRefresh();
 }
 els["back-link"].addEventListener("click", ()=>{
   if(!confirm("今日の計算問題をやめてもどりますか？")) return;
@@ -673,6 +742,466 @@ els["print-answers-btn"].addEventListener("click", async ()=>{
   await waitForPrintImages();
   window.print();
 });
+
+// ============================================================
+// ★今日のプリント（毎日の紙と丸付け。2026-10-07）
+// 依頼: 司令塔\回答\計算プリント_毎日の紙と丸付け_依頼_2026-10-07.md
+//   ・ボタン1つで今日の数問を選んで A4 で印刷（問題 → 改ページ → 答えと解き方）
+//   ・印刷した回ごとに ◎／△／✕ を付ける。記録は端末に保存（消さない）。既存の「正解の記録」(keisan_print_stats_v1) とは別の入れ物
+//   ・記録の自動送信は kosukequiz-battle の auto-send と同じ作り（鍵は端末だけ・検査用の api 差しかえは localhost のときだけ）
+// ============================================================
+const DAILY_KEY = "keisan_daily_v1";           // {sheets:[{id,date,at,ids:[...],marks:{問題id:{r,t}}}]}  ★消さない
+const DAILY_COUNT_KEY = "keisan_daily_count_v1"; // 親が選んだ問題数（3〜6）
+const MARK_SYMS = ["◎","△","✕"];
+function dayKeyOf(t){ const d = new Date(t || Date.now()), p = n => String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+
+// ---- 記録（端末）----
+function dailyLoad(){
+  let raw = null;
+  try{ raw = localStorage.getItem(DAILY_KEY); }catch(e){}
+  if(!raw) return { sheets: [] };
+  try{
+    const v = JSON.parse(raw);
+    if(v && Array.isArray(v.sheets)) return v;
+  }catch(e){}
+  // 読めなかったときも、元の文字列は捨てない（別の名前で残してから空で始める）
+  try{ localStorage.setItem(DAILY_KEY + "_corrupt_" + Date.now(), raw); }catch(e){}
+  return { sheets: [] };
+}
+function dailySave(d){
+  try{ localStorage.setItem(DAILY_KEY, JSON.stringify(d)); return true; }catch(e){ return false; }
+}
+
+// ---- 問題の選び方 ----
+// 1) 前回 ✕ の問題 → △ の問題
+// 2) まだやっていない問題のうち、司令塔が指定した「優先する単元」（指定が無ければ全部）
+// 3) 7日以上やっていない ◎ の問題
+// 4) まだやっていない問題（そのほか） → 最近の ◎
+// 同じ単元は 数÷2（切り上げ）問まで。足りなければ超えてもよいので埋める。
+// 同じ日に選び直しても同じ結果になるよう、並びの乱れは日づけから決める。
+function historyOf(id, daily){
+  const out = [];
+  daily.sheets.forEach(sh=>{ const m = sh.marks && sh.marks[id]; if(m && m.r) out.push({ t: m.t || 0, r: m.r }); });
+  out.sort((a,b)=>a.t-b.t);
+  if(!out.length){
+    // これまでの「正解の記録」も手がかりにする（読むだけ。書き換えない）
+    const st = stats[id];
+    if(st){
+      if(st.correct > 0) out.push({ t: Date.parse(st.lastCorrectAt) || 0, r: "◎", legacy: true });
+      else if(st.wrong > 0) out.push({ t: Date.parse(st.lastAnswered) || 0, r: "✕", legacy: true });
+    }
+  }
+  return out;
+}
+function hashStr(s){ let h = 2166136261; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function pickDaily(count, units, nowMs, daily, exclude){
+  daily = daily || dailyLoad();
+  nowMs = nowMs || Date.now();
+  units = (units || []).filter(u => typeof u === "string" && u);
+  const dk = dayKeyOf(nowMs);
+  const isPrio = d => units.some(u => d.u.indexOf(u) >= 0);
+  const items = QA_DATA.map((d,i)=>{
+    const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
+    let rank;
+    if(last && last.r === "✕") rank = 0;
+    else if(last && last.r === "△") rank = 1;
+    else if(!last) rank = (units.length === 0 || isPrio(d)) ? 2 : 4;
+    else rank = (nowMs - last.t) >= 7*86400000 ? 3 : 5;
+    if(exclude && exclude.indexOf(d.id) >= 0) rank += 10;   // 選び直しのとき、いまのプリントの問題は後回し
+    return { i: i, d: d, rank: rank, t: last ? last.t : 0, h: hashStr(dk + d.id) };
+  });
+  items.sort((a,b)=> a.rank - b.rank || a.t - b.t || a.h - b.h);
+  const cap = Math.max(1, Math.ceil(count/2));
+  const per = {}, chosen = [];
+  items.forEach(it=>{ if(chosen.length >= count) return; const n = per[it.d.u] || 0; if(n >= cap) return; per[it.d.u] = n+1; chosen.push(it); });
+  items.forEach(it=>{ if(chosen.length >= count) return; if(chosen.indexOf(it) < 0) chosen.push(it); });
+  return chosen.map(it=>it.i).sort((a,b)=>a-b).map(i=>QA_DATA[i].id);
+}
+
+// ---- 優先する単元（kosuke-records の plan/keisan.json。読めなければ全単元から）----
+let dailyPlan = null;   // {units:[...], count}
+function planClean(j){
+  if(!j || typeof j !== "object") return null;
+  const units = Array.isArray(j.units) ? j.units.filter(u => typeof u === "string" && u.trim()).map(u => u.trim().slice(0,30)).slice(0,30) : [];
+  let count = parseInt(j.count, 10);
+  if(isNaN(count) || count < 3 || count > 6) count = null;
+  return { units: units, count: count };
+}
+async function dailyPlanFetch(){
+  dailyPlan = null;
+  const cfg = sendCfg();
+  if(!cfg) return;
+  try{
+    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(()=>ctl.abort(), 5000) : null;
+    const { api, repo } = sendTarget(cfg);
+    const r = await fetch(api + "/repos/" + repo + "/contents/plan/keisan.json?ref=main", { cache: "no-store", signal: ctl ? ctl.signal : undefined,
+      headers: { "Authorization": "Bearer " + cleanToken(cfg.token), "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" } });
+    if(timer) clearTimeout(timer);
+    if(!r.ok) return;
+    const j = await r.json();
+    const bin = atob(String(j.content || "").replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for(let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    dailyPlan = planClean(JSON.parse(new TextDecoder().decode(bytes)));
+  }catch(e){ dailyPlan = null; }
+}
+
+// ---- 問題数 ----
+function dailyCount(){
+  let v = null;
+  try{ v = parseInt(localStorage.getItem(DAILY_COUNT_KEY), 10); }catch(e){}
+  if(!isNaN(v) && v >= 3 && v <= 6) return v;
+  if(dailyPlan && dailyPlan.count) return dailyPlan.count;
+  return 4;
+}
+document.querySelectorAll("#daily-count-chips .chip").forEach(el=>{
+  el.addEventListener("click", ()=>{
+    try{ localStorage.setItem(DAILY_COUNT_KEY, el.dataset.n); }catch(e){}
+    dailyRefresh();
+  });
+});
+
+// ---- 今日のプリントを作る ----
+function todaySheet(daily){
+  const dk = dayKeyOf();
+  const mine = daily.sheets.filter(sh => sh.date === dk);
+  return mine.length ? mine[mine.length-1] : null;
+}
+function newSheetId(daily, dk){
+  let id = dk, n = 1;
+  while(daily.sheets.some(sh => sh.id === id)){ n++; id = dk + "-" + n; }
+  return id;
+}
+async function dailyMakeSheet(redo){
+  await dailyPlanFetch();
+  const daily = dailyLoad();
+  const count = dailyCount();
+  const cur = redo ? todaySheet(daily) : null;
+  const ids = pickDaily(count, dailyPlan ? dailyPlan.units : [], Date.now(), daily, cur ? cur.ids : null);
+  const dk = dayKeyOf();
+  const sheet = { id: newSheetId(daily, dk), date: dk, at: Date.now(), ids: ids, marks: {} };
+  daily.sheets.push(sheet);
+  dailySave(daily);
+  return sheet;
+}
+function sheetQueue(sheet){
+  const pos = {}; QA_DATA.forEach((d,i)=>{ pos[d.id] = i; });
+  return sheet.ids.filter(id => pos[id] !== undefined).map(id => pos[id]);
+}
+function dailyHeaderHtml(sheet, isAnswer){
+  const d = new Date(sheet.at), wd = "日月火水木金土"[d.getDay()];
+  let html = '<div class="print-header"><div>';
+  html += '<div class="print-title">🧮 理科 今日の計算プリント' + (isAnswer ? '　答えと解き方（おうちの人用）' : '') + '</div>';
+  html += '<div class="print-meta"><span>' + (d.getMonth()+1) + '月' + d.getDate() + '日（' + wd + '）</span><span>全' + sheet.ids.length + '問</span>';
+  if(!isAnswer) html += '<span>なまえ <span class="print-blank"></span></span>';
+  html += '</div></div>';
+  if(!isAnswer) html += '<div class="print-time">はじめ <span class="tm">　　:　　</span>　おわり <span class="tm">　　:　　</span></div>';
+  html += '</div>';
+  return html;
+}
+function dailyPrintHtml(sheet){
+  const q = sheetQueue(sheet);
+  return '<div class="daily-print">'
+    + '<div class="print-problems">' + dailyHeaderHtml(sheet, false) + printGroupsHtml(q, false) + '</div>'
+    + '<div class="print-answers">' + dailyHeaderHtml(sheet, true) + printGroupsHtml(q, true) + '</div>'
+    + '</div>';
+}
+async function dailyPrint(sheet){
+  document.getElementById("print-region").innerHTML = dailyPrintHtml(sheet);
+  await waitForPrintImages();
+  window.print();
+}
+let dailyBusy = false;
+document.getElementById("daily-print-btn").addEventListener("click", async ()=>{
+  if(dailyBusy) return;
+  dailyBusy = true;
+  try{
+    let sheet = todaySheet(dailyLoad());
+    if(!sheet) sheet = await dailyMakeSheet();
+    dailyRefresh();
+    await dailyPrint(sheet);
+  } finally { dailyBusy = false; }
+});
+document.getElementById("daily-redo-btn").addEventListener("click", async ()=>{
+  if(dailyBusy) return;
+  if(!confirm("今日のぶんを、別の問題で作り直します（前のプリントは◎をつける一覧に残ります）。よろしいですか？")) return;
+  dailyBusy = true;
+  try{
+    await dailyMakeSheet(true);
+    dailyRefresh();
+  } finally { dailyBusy = false; }
+});
+
+function dailyRefresh(){
+  const n = dailyCount();
+  document.querySelectorAll("#daily-count-chips .chip").forEach(c => c.classList.toggle("active", parseInt(c.dataset.n,10) === n));
+  const pn = document.getElementById("daily-plan-note");
+  pn.textContent = dailyPlan && dailyPlan.units.length
+    ? "優先する単元：" + dailyPlan.units.join("、") + "（司令塔の指定）"
+    : "優先する単元：指定なし（全単元から。✕だった問題・まだやっていない問題を先に出します）";
+  const daily = dailyLoad(), sh = todaySheet(daily);
+  const tn = document.getElementById("daily-today-note");
+  if(sh){
+    const done = Object.keys(sh.marks || {}).length;
+    tn.textContent = "今日のぶん：" + sh.ids.length + "問（◎などをつけた数 " + done + "）。もう一度押すと同じプリントを刷ります。";
+  }else tn.textContent = "今日のプリントは、まだ作っていません。押すと選んで印刷します。";
+  document.getElementById("daily-redo-btn").style.display = sh ? "block" : "none";
+}
+
+// ---- ◎をつける ----
+function renderMarks(){
+  const daily = dailyLoad();
+  const body = document.getElementById("marks-body");
+  if(!daily.sheets.length){ body.innerHTML = '<div class="daily-note">まだ印刷した回がありません。</div>'; return; }
+  const byId = {}; QA_DATA.forEach(d => { byId[d.id] = d; });
+  body.innerHTML = daily.sheets.slice().reverse().map((sh, k)=>{
+    const ms = sh.ids.map(id => (sh.marks && sh.marks[id] || {}).r || "");
+    const cnt = r => ms.filter(x => x === r).length;
+    const m = /^\d+-(\d+)-(\d+)(?:-(\d+))?$/.exec(sh.id);
+    const label = m ? (parseInt(m[1],10) + "/" + parseInt(m[2],10) + (m[3] ? "（" + m[3] + "回目）" : "")) : sh.id;
+    const title = label + " のプリント　" + sh.ids.length + "問　◎" + cnt("◎") + " △" + cnt("△") + " ✕" + cnt("✕") + " 未" + ms.filter(x => !x).length;
+    return '<details class="mk-sheet"' + (k === 0 ? " open" : "") + '><summary>' + escapeHtml(title) + '</summary>'
+      + sh.ids.map((id, i)=>{
+          const d = byId[id]; if(!d) return "";
+          const cur = (sh.marks && sh.marks[id] || {}).r || "";
+          return '<div class="mk-row"><div class="mk-head">No.' + (i+1) + '　' + escapeHtml(d.u) + '</div>'
+            + '<div class="mk-q">' + escapeHtml(d.q.length > 60 ? d.q.slice(0,60) + "…" : d.q) + '</div>'
+            + '<div class="mk-btns">' + MARK_SYMS.map(r => '<button type="button" class="mk-btn' + (cur === r ? " on" : "") + '" data-sheet="' + escapeHtml(sh.id) + '" data-q="' + escapeHtml(id) + '" data-r="' + r + '">' + r + '</button>').join("") + '</div></div>';
+        }).join("")
+      + '</details>';
+  }).join("");
+}
+document.getElementById("marks-body").addEventListener("click", (e)=>{
+  const b = e.target.closest(".mk-btn");
+  if(!b) return;
+  setMark(b.dataset.sheet, b.dataset.q, b.dataset.r);
+});
+function setMark(sheetId, qid, r){
+  if(MARK_SYMS.indexOf(r) < 0) return;
+  const daily = dailyLoad();
+  const sh = daily.sheets.find(x => x.id === sheetId);
+  if(!sh || sh.ids.indexOf(qid) < 0) return;
+  sh.marks = sh.marks || {};
+  sh.marks[qid] = { r: r, t: Date.now() };
+  if(!dailySave(daily)){ alert("この端末に保存できませんでした。"); return; }
+  const open = Array.from(document.querySelectorAll("#marks-body details")).map(x => x.open);
+  renderMarks();
+  document.querySelectorAll("#marks-body details").forEach((x,i)=>{ if(open[i] !== undefined) x.open = open[i]; });
+  sendSheet(sh);
+  dailyRefresh();
+}
+document.getElementById("daily-marks-btn").addEventListener("click", ()=>{
+  renderMarks();
+  els["screen-setup"].style.display = "none";
+  document.getElementById("screen-marks").style.display = "block";
+  window.scrollTo(0,0);
+});
+document.getElementById("marks-back-link").addEventListener("click", backToSetup);
+
+// ============================================================
+// 記録の自動送信（kosukequiz-battle の auto-send と同じ作り）
+//   ・送り先は nambanamba/kosuke-records（main）。keisan/session/YYYY-MM-DD/<プリントのid>.json に書く
+//   ・★鍵はこの端末の localStorage にだけ置く。コードには書かない。★鍵が空なら何も送らない・何もためない
+//   ・送れなかった分は IndexedDB（keisan_outbox）にためて、次に送る。同じ id は上書き（二重にためない）
+//   ・401/403 は小さく「鍵を作り直して」。ためた分は残す。アプリは止めない。名前は送らない
+// ============================================================
+const SEND_CFG_KEY = "keisan_send_gh_v1";   // {token, api?, repo?}（api・repo は検査用。ふだんは入れない）
+const SEND_AUTH_KEY = "keisan_send_autherr_v1";
+const SEND_DB = "keisan_outbox";
+const SEND_API = "https://api.github.com";
+const SEND_REPO = "nambanamba/kosuke-records";
+function sendCfg(){
+  try{ const c = JSON.parse(window.localStorage.getItem(SEND_CFG_KEY) || "null"); return (c && typeof c.token === "string" && c.token.trim()) ? c : null; }catch(e){ return null; }
+}
+// ★検査用の差しかえ（cfg.api）は、この端末の中（http://127.0.0.1 / http://localhost）のときだけ効く。
+//   それ以外は無視して api.github.com に送る（鍵をよそのサーバに送らないため）
+function sendTarget(cfg){
+  const testApi = typeof cfg.api === "string" && /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(cfg.api) ? cfg.api : "";
+  return { api: (testApi || SEND_API).replace(/\/+$/, ""), repo: testApi && cfg.repo ? cfg.repo : SEND_REPO };
+}
+let sendDbP = null;
+function sendDb(){
+  if(!sendDbP) sendDbP = new Promise((res, rej) => {
+    if(typeof indexedDB === "undefined"){ rej(new Error("IndexedDB が使えません")); return; }
+    const r = indexedDB.open(SEND_DB, 1);
+    r.onupgradeneeded = () => { if(!r.result.objectStoreNames.contains("q")) r.result.createObjectStore("q", { keyPath: "id" }); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.onblocked = () => rej(new Error("IndexedDB が開けません（blocked）"));
+  }).catch(e => { console.error("open outbox failed", e); return null; });
+  return sendDbP;
+}
+const sendMem = new Map();
+function sendTx(db, mode, fn){
+  return new Promise((res, rej) => {
+    const tx = db.transaction(["q"], mode);
+    let out;
+    const r = fn(tx.objectStore("q"));
+    if(r) r.onsuccess = () => { out = r.result; };
+    tx.oncomplete = () => res(out);
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error);
+  });
+}
+async function outboxPut(item){
+  const db = await sendDb();
+  if(db){ try{ await sendTx(db, "readwrite", st => st.put(item)); return; }catch(e){ console.error("outbox put failed", e); } }
+  sendMem.set(item.id, item);
+}
+async function outboxAll(){
+  const db = await sendDb();
+  let arr = [];
+  if(db){ try{ arr = (await sendTx(db, "readonly", st => st.getAll())) || []; }catch(e){ arr = []; } }
+  sendMem.forEach(v => { if(!arr.some(x => x.id === v.id)) arr.push(v); });
+  return arr.sort((a, b) => (a.at - b.at) || (a.id < b.id ? -1 : 1));
+}
+async function outboxDel(id){
+  sendMem.delete(id);
+  const db = await sendDb();
+  if(db){ try{ await sendTx(db, "readwrite", st => st.delete(id)); }catch(e){} }
+}
+function sendB64(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for(let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function sendAuthWarn(on){
+  try{ if(on) window.localStorage.setItem(SEND_AUTH_KEY, "1"); else window.localStorage.removeItem(SEND_AUTH_KEY); }catch(e){}
+  const el = document.getElementById("send-auth-warn");
+  if(el) el.style.display = on ? "block" : "none";
+}
+let sendLastErr = "";
+// 鍵の掃除: 全角→半角（NFKC）にしてから、空白・改行・見えない文字を全部取る
+function cleanToken(raw){
+  let t = String(raw || "");
+  try{ t = t.normalize("NFKC"); }catch(e){}
+  return t.replace(/[\s\u00A0\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u3000\uFEFF]/g, "");
+}
+function tokenLooksOk(t){ return /^github_pat_[A-Za-z0-9_]+$/.test(t); }
+function describeSendError(e){
+  if(typeof navigator !== "undefined" && navigator.onLine === false) return "通信できない（オフライン）";
+  const m = String((e && (e.message || e)) || "");
+  if(/ISO-8859|header|ByteString|Headers/i.test(m)) return "ヘッダの文字が不正（鍵に使えない文字が入っています。貼り直してください）";
+  return "通信できない（" + m.slice(0, 60) + "）";
+}
+// 1件を GitHub に書く。戻り値 "ok" / "auth"（401・403）/ "retry"
+async function sendOne(cfg, it){
+  const { api, repo } = sendTarget(cfg);
+  const url = api + "/repos/" + repo + "/contents/" + it.path.split("/").map(encodeURIComponent).join("/");
+  const headers = { "Authorization": "Bearer " + cleanToken(cfg.token), "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  const body = { message: "keisan " + it.kind + " " + it.path, content: sendB64(JSON.stringify(it.data, null, 1)), branch: "main" };
+  try{
+    if(it.overwrite){
+      const g = await fetch(url + "?ref=main", { headers: headers, cache: "no-store" });
+      if(g.status === 401 || g.status === 403) return "auth";
+      if(g.ok){ const j = await g.json(); if(j && j.sha) body.sha = j.sha; }
+      else if(g.status !== 404){ sendLastErr = "GitHub の返事が " + g.status; return "retry"; }
+    }
+    const r = await fetch(url, { method: "PUT", headers: Object.assign({ "Content-Type": "application/json" }, headers), body: JSON.stringify(body) });
+    if(r.status === 200 || r.status === 201) return "ok";
+    if(r.status === 401 || r.status === 403) return "auth";
+    sendLastErr = "GitHub の返事が " + r.status;
+    return "retry";
+  }catch(e){ sendLastErr = describeSendError(e); console.error("send failed", e); return "retry"; }
+}
+async function sendEnqueue(id, kind, path, data, overwrite){
+  if(!sendCfg()) return false;   // ★鍵が無ければ何もためない・何も送らない
+  await outboxPut({ id: id, kind: kind, path: path, overwrite: !!overwrite, at: Date.now(), data: data });
+  sendFlush();
+  return true;
+}
+let sendBusy = false, sendAgain = false;
+async function sendFlush(){
+  const cfg = sendCfg();
+  if(!cfg) return { sent: 0, left: 0, stop: "" };
+  if(sendBusy){ sendAgain = true; return null; }
+  sendBusy = true;
+  let sent = 0, stop = "";
+  try{
+    const items = await outboxAll();
+    for(const it of items){
+      const r = await sendOne(cfg, it);
+      if(r !== "ok"){ stop = r; break; }
+      await outboxDel(it.id);
+      sent++;
+    }
+  }catch(e){ stop = "retry"; }
+  finally{ sendBusy = false; }
+  if(stop === "auth") sendAuthWarn(true);
+  else if(sent > 0 || !stop) sendAuthWarn(false);
+  if(sendAgain){ sendAgain = false; return sendFlush(); }
+  const left = (await outboxAll()).length;
+  sendShowStatus("");
+  return { sent: sent, left: left, stop: stop };
+}
+// プリント1回ぶんの◎×を送る（◎をつけ直すたび、同じファイルを上書き）
+function sendSheet(sh){
+  if(!sh || !sendCfg()) return;
+  try{
+    const q = [];
+    sh.ids.forEach(id => { const m = sh.marks && sh.marks[id]; if(m && m.r){ const d = QA_DATA.find(x => x.id === id); q.push({ id: id, u: d ? d.u : "", r: m.r, t: new Date(m.t).toISOString() }); } });
+    if(!q.length) return;
+    sendEnqueue("session_" + sh.id, "session", "keisan/session/" + sh.date + "/" + sh.id + ".json",
+      { app: "keisan", id: sh.id, date: sh.date, n: sh.ids.length, ids: sh.ids, q: q }, true);
+  }catch(e){ console.error("send sheet failed", e); }
+}
+let sendStatusMsg = "";
+async function sendShowStatus(msg){
+  const el = document.getElementById("send-status");
+  if(!el) return;
+  if(msg) sendStatusMsg = msg;
+  const left = sendCfg() ? (await outboxAll()).length : 0;
+  el.textContent = (sendStatusMsg ? sendStatusMsg + " " : "") + (sendCfg() ? "（まだ送れていない記録: " + left + "件）" : "（鍵が入っていないので、送りません）");
+}
+function sendSaveFromInput(){
+  const input = document.getElementById("send-token");
+  const token = cleanToken(input.value);
+  let old = null;
+  try{ old = JSON.parse(window.localStorage.getItem(SEND_CFG_KEY) || "null"); }catch(e){}
+  if(!token){ try{ window.localStorage.removeItem(SEND_CFG_KEY); }catch(e){} return "cleared"; }
+  if(!tokenLooksOk(token)) return "badtoken";
+  input.value = token;
+  try{ window.localStorage.setItem(SEND_CFG_KEY, JSON.stringify(Object.assign({}, old || {}, { token: token }))); }catch(e){ return "fail"; }
+  return "ok";
+}
+const SEND_WHY = { auth: "鍵がちがうか、期限が切れています（鍵を作り直してください）。", retry: "つながらないか、GitHub が返事をしませんでした。あとで自動でもう一度送ります。" };
+function setupAutoSend(){
+  const c = sendCfg();
+  document.getElementById("send-token").value = c ? c.token : "";
+  sendAuthWarn((() => { try{ return !!c && window.localStorage.getItem(SEND_AUTH_KEY) === "1"; }catch(e){ return false; } })());
+  document.getElementById("send-save-btn").addEventListener("click", async ()=>{
+    const r = sendSaveFromInput();
+    if(r === "badtoken"){ sendShowStatus("鍵の形がちがいます（github_pat_ で始まる英数字だけ）。保存していません。"); return; }
+    if(r === "fail"){ sendShowStatus("この端末に保存できませんでした。"); return; }
+    if(r === "cleared"){ sendAuthWarn(false); sendShowStatus("鍵を消しました。もう送りません（ためていた分は残しています）。"); dailyPlan = null; dailyRefresh(); return; }
+    sendShowStatus("保存しました。");
+    await sendFlush();
+    await dailyPlanFetch(); dailyRefresh();
+    sendShowStatus("保存しました。");
+  });
+  document.getElementById("send-test-btn").addEventListener("click", async ()=>{
+    const r = sendSaveFromInput();
+    if(r === "badtoken"){ sendShowStatus("鍵の形がちがいます（github_pat_ で始まる英数字だけ）。保存していません。"); return; }
+    if(r !== "ok"){ sendShowStatus("先に鍵を貼ってください。"); return; }
+    sendLastErr = "";
+    const now = new Date(), p = n => String(n).padStart(2, "0");
+    const stamp = dayKeyOf(now) + "_" + p(now.getHours()) + p(now.getMinutes()) + p(now.getSeconds());
+    const res = await sendOne(sendCfg(), { kind: "test", path: "test/keisan_" + stamp + ".json", overwrite: false, data: { app: "keisan", at: now.toISOString(), note: "ためしに送る" } });
+    sendAuthWarn(res === "auth");
+    if(res === "ok"){ await sendFlush(); sendShowStatus("送れました（kosuke-records の test/keisan_" + stamp + ".json）。"); }
+    else sendShowStatus("送れませんでした: " + (res === "auth" ? SEND_WHY.auth : (sendLastErr ? sendLastErr + "。あとで自動でもう一度送ります。" : SEND_WHY.retry)));
+  });
+  window.addEventListener("online", () => { sendFlush(); });
+  sendShowStatus("");
+  // 開いたら、ためていた分を送る / 優先する単元を読む（画面が出たあと、うしろで）
+  setTimeout(() => { sendFlush().then(() => sendShowStatus("")); }, 1500);
+  dailyPlanFetch().then(dailyRefresh);
+}
+setupAutoSend();
+dailyRefresh();
+
 </script>
 </body>
 </html>
