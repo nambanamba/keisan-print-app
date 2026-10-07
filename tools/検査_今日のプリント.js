@@ -81,7 +81,8 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   let ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   let page = await newPage(ctx);
   const reqs = []; page.on("request", r => { if(!r.url().startsWith("http://127.0.0.1:" + sp)) reqs.push(r.url()); });
-  ok(await page.evaluate(() => QA_DATA.length) === 77, "問題は77問のまま（data.js は触っていない）");
+  ok(await page.evaluate(() => QA_DATA.length) === 82, "問題は82問（既存77＋第6回5）");
+  ok(await page.evaluate(() => QA_DATA.slice(0, 77).every(d => /^r[12]c\d+$/.test(d.id)) && QA_DATA.slice(77).map(d => d.id).join() === "r6c01,r6c02,r6c03,r6c04,r6c05"), "既存77問はそのまま・第6回は後ろに足してある");
   await page.screenshot({ path: path.join(OUT, "01_ホーム.png"), fullPage: true });
   await page.click("#daily-print-btn");
   await page.waitForFunction(() => window.__printed === 1);
@@ -245,6 +246,53 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   await new Promise(r => setTimeout(r, 800));
   ok(!seen.some(u => u.startsWith("EVIL")), "localhost 以外の api は無視する（鍵をよそに送らない）", JSON.stringify(seen));
   ok(seen.some(u => u.startsWith("https://api.github.com/repos/nambanamba/kosuke-records/contents/keisan/session/")), "かわりに api.github.com の kosuke-records に送る", JSON.stringify(seen));
+  await ctx.close();
+
+
+  // ============ 6. 第6回の取り込みと、plan の新しい書き方 ============
+  console.log("[6] 第6回・exclude_levels・単元ごとの数");
+  ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  page = await newPage(ctx);
+  const r6 = await page.evaluate(async () => {
+    const q = id => QA_DATA.find(d => d.id === id);
+    const imgOk = f => new Promise(r => { const i = new Image(); i.onload = () => r(i.naturalWidth > 0); i.onerror = () => r(false); i.src = "images/" + f; });
+    const lv = QA_DATA.slice(77).map(d => d.level).join();
+    const now = Date.now(), none = { sheets: [] };
+    const A = pickDaily(4, [{ name: "呼吸・循環", count: 3 }, { name: "てこ", count: 1 }], now, none, null, []);
+    const B = pickDaily(4, [{ name: "呼吸・循環", count: 3 }, { name: "てこ", count: 1 }], now, none, null, ["発展"]);
+    const C = pickDaily(4, ["呼吸・循環"], now, none, null, ["発展"]);
+    const D = pickDaily(6, [], now, none, null, ["発展"]);
+    const cl = JSON.stringify(planClean({ units: [{ name: "てこ", count: 1 }, "中和", { bad: 1 }], exclude_levels: ["発展", 3, ""], count: 4 }));
+    const un = id => (q(id) || {}).u;
+    return { imgs: [await imgOk("r6c_01.jpg"), await imgOk("r6c_02.jpg")], img12: [q("r6c01").img, q("r6c02").img, q("r6c03").img], lv, A, B, C, D, cl,
+      aU: A.map(un), bU: B.map(un), lvOf: id => 0 };
+  });
+  ok(r6.imgs[0] && r6.imgs[1] && r6.img12[0] === "r6c_01.jpg" && r6.img12[1] === "r6c_02.jpg" && !r6.img12[2], "第6回の図2枚が読める（r6c01・r6c02）。r6c03〜05 は図なし");
+  ok(r6.lv === "標準,標準,発展,発展,発展", "r6c03〜05 は level 発展", r6.lv);
+  ok(r6.A.filter(id => /^r6c/.test(id)).length === 3 && r6.A.filter(id => /^r[12]c/.test(id) && !/^r6c/.test(id)).length === 1, "units に数を書くと、呼吸・循環3問＋てこ1問になる", JSON.stringify(r6.aU));
+  ok(r6.B.every(id => !["r6c03","r6c04","r6c05"].includes(id)), "exclude_levels=[発展] なら発展の問題は自動で選ばれない", JSON.stringify(r6.B));
+  ok(r6.B.includes("r6c01") && r6.B.includes("r6c02") && r6.B.length === 4, "発展を除いても、残りの呼吸・循環2問と、ほかで4問になる", JSON.stringify(r6.B));
+  ok(r6.C.includes("r6c01") && r6.C.length === 4, "文字列の配列の units も今までどおり読める", JSON.stringify(r6.C));
+  ok(r6.D.length === 6 && !r6.D.some(id => ["r6c03","r6c04","r6c05"].includes(id)), "単元の指定が無くても exclude_levels は効く");
+  const cl = JSON.parse(r6.cl);
+  ok(cl.units.length === 2 && cl.units[0].name === "てこ" && cl.units[0].count === 1 && cl.units[1].count === 0 && cl.excludeLevels.join() === "発展" && cl.count === 4, "planClean: 文字列も {name,count} も読み、壊れた項目は捨てる", r6.cl);
+  // 手で選ぶのは可（今までの画面では発展も出せる）
+  ok(await page.evaluate(() => buildCalcPool(6, 6, false).length) === 5, "手で選ぶ画面（第6回の範囲）では5問とも出せる");
+  await ctx.close();
+
+  // plan を鍵つきで読んで、画面と選び方に出る
+  mock.files = {}; mock.log = []; mock.mode = "ok";
+  mock.plan = { units: [{ name: "呼吸・循環", count: 3 }, { name: "てこ", count: 1 }], exclude_levels: ["発展"], count: 4 };
+  ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+  page = await newPage(ctx);
+  await setCfg(page, { token: TOKEN, api: API, repo: "owner/repo" });
+  await page.reload();
+  await page.waitForFunction(() => /呼吸/.test(document.getElementById("daily-plan-note").textContent));
+  ok(/呼吸・循環×3/.test(await page.textContent("#daily-plan-note")) && /発展/.test(await page.textContent("#daily-plan-note")), "画面に「呼吸・循環×3、てこ×1／自動では出さない：発展」と出る", await page.textContent("#daily-plan-note"));
+  await page.click("#daily-print-btn");
+  await page.waitForFunction(() => window.__printed === 1);
+  d = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
+  ok(d.sheets[0].ids.length === 4 && d.sheets[0].ids.every(id => !["r6c03","r6c04","r6c05"].includes(id)) && d.sheets[0].ids.includes("r6c01"), "今日のプリントに発展は入らず、第6回の標準が入る", JSON.stringify(d.sheets[0].ids));
   await ctx.close();
 
   // ============ 5. 印刷の見本 ============

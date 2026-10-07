@@ -802,13 +802,18 @@ function historyOf(id, daily){
   return out;
 }
 function hashStr(s){ let h = 2166136261; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function pickDaily(count, units, nowMs, daily, exclude){
+function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
-  units = (units || []).filter(u => typeof u === "string" && u);
+  // units は文字列の配列、または {name,count} の配列（count 問ぶんをその単元から先に取る）
+  const uq = (units || []).map(u => typeof u === "string" ? { name: u, count: 0 } : (u && typeof u.name === "string" ? { name: u.name, count: parseInt(u.count, 10) || 0 } : null)).filter(u => u && u.name);
+  units = uq.map(u => u.name);
+  const exLv = (excludeLevels || []).filter(x => typeof x === "string" && x);
   const dk = dayKeyOf(nowMs);
   const isPrio = d => units.some(u => d.u.indexOf(u) >= 0);
+  // level が除外指定のものは、自動では選ばない（手で選ぶのは可）
   const items = QA_DATA.map((d,i)=>{
+    if(exLv.indexOf(d.level) >= 0) return null;
     const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
     let rank;
     if(last && last.r === "✕") rank = 0;
@@ -817,11 +822,17 @@ function pickDaily(count, units, nowMs, daily, exclude){
     else rank = (nowMs - last.t) >= 7*86400000 ? 3 : 5;
     if(exclude && exclude.indexOf(d.id) >= 0) rank += 10;   // 選び直しのとき、いまのプリントの問題は後回し
     return { i: i, d: d, rank: rank, t: last ? last.t : 0, h: hashStr(dk + d.id) };
-  });
+  }).filter(Boolean);
   items.sort((a,b)=> a.rank - b.rank || a.t - b.t || a.h - b.h);
   const cap = Math.max(1, Math.ceil(count/2));
   const per = {}, chosen = [];
-  items.forEach(it=>{ if(chosen.length >= count) return; const n = per[it.d.u] || 0; if(n >= cap) return; per[it.d.u] = n+1; chosen.push(it); });
+  // 単元ごとの数の指定（司令塔）: 指定の順に、その単元の問題を count 問まで先に取る
+  uq.forEach(u => {
+    if(!u.count) return;
+    let got = 0;
+    items.forEach(it => { if(got >= u.count || chosen.length >= count || chosen.indexOf(it) >= 0 || it.d.u.indexOf(u.name) < 0) return; chosen.push(it); per[it.d.u] = (per[it.d.u] || 0) + 1; got++; });
+  });
+  items.forEach(it=>{ if(chosen.length >= count || chosen.indexOf(it) >= 0) return; const n = per[it.d.u] || 0; if(n >= cap) return; per[it.d.u] = n+1; chosen.push(it); });
   items.forEach(it=>{ if(chosen.length >= count) return; if(chosen.indexOf(it) < 0) chosen.push(it); });
   return chosen.map(it=>it.i).sort((a,b)=>a-b).map(i=>QA_DATA[i].id);
 }
@@ -830,10 +841,16 @@ function pickDaily(count, units, nowMs, daily, exclude){
 let dailyPlan = null;   // {units:[...], count}
 function planClean(j){
   if(!j || typeof j !== "object") return null;
-  const units = Array.isArray(j.units) ? j.units.filter(u => typeof u === "string" && u.trim()).map(u => u.trim().slice(0,30)).slice(0,30) : [];
+  // units: ["てこ"] でも [{"name":"てこ","count":1}] でも読める
+  const units = Array.isArray(j.units) ? j.units.map(u => {
+    if(typeof u === "string") return u.trim() ? { name: u.trim().slice(0,30), count: 0 } : null;
+    if(u && typeof u.name === "string" && u.name.trim()){ let c = parseInt(u.count, 10); if(isNaN(c) || c < 0 || c > 6) c = 0; return { name: u.name.trim().slice(0,30), count: c }; }
+    return null;
+  }).filter(Boolean).slice(0,30) : [];
+  const excludeLevels = Array.isArray(j.exclude_levels) ? j.exclude_levels.filter(x => typeof x === "string" && x.trim()).map(x => x.trim().slice(0,20)).slice(0,10) : [];
   let count = parseInt(j.count, 10);
   if(isNaN(count) || count < 3 || count > 6) count = null;
-  return { units: units, count: count };
+  return { units: units, count: count, excludeLevels: excludeLevels };
 }
 async function dailyPlanFetch(){
   dailyPlan = null;
@@ -886,7 +903,7 @@ async function dailyMakeSheet(redo){
   const daily = dailyLoad();
   const count = dailyCount();
   const cur = redo ? todaySheet(daily) : null;
-  const ids = pickDaily(count, dailyPlan ? dailyPlan.units : [], Date.now(), daily, cur ? cur.ids : null);
+  const ids = pickDaily(count, dailyPlan ? dailyPlan.units : [], Date.now(), daily, cur ? cur.ids : null, dailyPlan ? dailyPlan.excludeLevels : []);
   const dk = dayKeyOf();
   const sheet = { id: newSheetId(daily, dk), date: dk, at: Date.now(), ids: ids, marks: {} };
   daily.sheets.push(sheet);
@@ -945,8 +962,8 @@ function dailyRefresh(){
   const n = dailyCount();
   document.querySelectorAll("#daily-count-chips .chip").forEach(c => c.classList.toggle("active", parseInt(c.dataset.n,10) === n));
   const pn = document.getElementById("daily-plan-note");
-  pn.textContent = dailyPlan && dailyPlan.units.length
-    ? "優先する単元：" + dailyPlan.units.join("、") + "（司令塔の指定）"
+  pn.textContent = dailyPlan && (dailyPlan.units.length || dailyPlan.excludeLevels.length)
+    ? "優先する単元：" + dailyPlan.units.map(u => u.name + (u.count ? "×" + u.count : "")).join("、") + (dailyPlan.excludeLevels && dailyPlan.excludeLevels.length ? "／自動では出さない：" + dailyPlan.excludeLevels.join("、") : "") + "（司令塔の指定）"
     : "優先する単元：指定なし（全単元から。✕だった問題・まだやっていない問題を先に出します）";
   const daily = dailyLoad(), sh = todaySheet(daily);
   const tn = document.getElementById("daily-today-note");
