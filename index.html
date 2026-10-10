@@ -55,10 +55,24 @@
   .btn-ng:hover{ background:#be123c; }
   .list-item{ display:flex; gap:11px; align-items:flex-start; padding:11px 4px; border-bottom:1px solid #e2e8f0; cursor:pointer; }
   .list-item input{ width:21px; height:21px; margin-top:3px; flex:none; }
-  .list-item.solved{ background:#f0fdf4; }
   .li-body{ flex:1; min-width:0; display:block; }
   .li-head{ display:block; font-size:0.74rem; color:var(--ink-soft); margin-bottom:2px; }
   .li-q{ display:block; font-size:0.88rem; line-height:1.6; }
+  .list-row{ border-bottom:1px solid #e2e8f0; }
+  .list-row .list-item{ border-bottom:none; }
+  .peek-btn{ display:block; margin:0 4px 8px 36px; padding:5px 12px; font-size:0.78rem; font-weight:700; color:var(--primary-dark); background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; cursor:pointer; }
+  .peek-btn[aria-expanded="true"]{ background:#dbeafe; }
+  .peek{ margin:0 4px 10px 36px; padding:10px; border:1px solid var(--border); border-radius:10px; background:#f8fafc; }
+  .peek[hidden]{ display:none; }
+  .peek img{ max-width:100%; border-radius:8px; display:block; margin-bottom:8px; cursor:zoom-in; }
+  .peek-ctx{ font-size:0.8rem; color:#475569; border-left:3px solid var(--border); padding-left:8px; margin-bottom:8px; white-space:pre-wrap; line-height:1.6; }
+  .peek-q{ font-size:0.9rem; line-height:1.7; white-space:pre-wrap; }
+  .mk-row .peek-btn{ margin:8px 0 0 0; }
+  .mk-row .peek{ margin:8px 0 0 0; }
+  .sticky-stat{ position:sticky; top:0; z-index:20; background:#fff; border-bottom:2px solid var(--border); padding:8px 4px; margin:0 0 4px; font-weight:700; }
+  .list-item{ border-left:5px solid transparent; }
+  .list-item.solved{ border-left-color:#16a34a; }
+  .list-item.solved{ background:#dcfce7; }
   .ctx-block{ border-left:3px solid var(--border); padding-left:11px; margin-bottom:14px; }
   .ctx-label{ font-size:0.72rem; font-weight:700; color:var(--ink-soft); margin-bottom:4px; }
   .ctx-text{ font-size:0.92rem; line-height:1.7; color:#475569; white-space:pre-wrap; }
@@ -287,6 +301,7 @@
     <div class="card">
       <div class="section-title">◎をつける（◎ できた　△ おしい　✕ できなかった）</div>
       <div class="daily-note">押すとその場で保存します。印刷した回ごとに出ています。</div>
+      <div class="stat-line sticky-stat" id="marks-stat"></div>
       <div id="marks-body"></div>
     </div>
   </div>
@@ -296,7 +311,7 @@
     <span class="btn-back" id="list-back-link">← もどる</span>
     <div class="card">
       <div class="section-title">正解した問題にチェックを入れてください</div>
-      <div class="stat-line" id="list-stat-line"></div>
+      <div class="stat-line sticky-stat" id="list-stat-line"></div>
       <div id="list-body"></div>
       <button class="btn-danger" id="reset-stats-btn">🗑️ 正解の記録をすべて消す</button>
     </div>
@@ -576,6 +591,33 @@ els["ctx-img"].addEventListener("click", ()=>{
   if(els["ctx-img"].src) openLightbox(els["ctx-img"].src);
 });
 
+// ---- 問題の中身を見る（問題の資料と本文だけ。答えは出さない。選ぶ・外すとは無関係に開閉）----
+function peekHtml(d, idx){
+  const ctxIdx = contextIndexFor(idx, new Set());
+  let inner = "";
+  if(ctxIdx !== null){
+    const c = getQ(ctxIdx);
+    inner += '<div class="peek-ctx">【前の問題】' + escapeHtml(c.q) + '</div>';
+    if(c.img && c.img !== d.img) inner += '<img src="images/' + escapeHtml(c.img) + '" alt="前の問題の資料" loading="lazy">';
+  }
+  if(d.img) inner += '<img src="images/' + escapeHtml(d.img) + '" alt="資料" loading="lazy">';
+  inner += '<div class="peek-q">' + escapeHtml(d.q) + '</div>';
+  return '<button type="button" class="peek-btn" aria-expanded="false">🔍 中身を見る</button><div class="peek" hidden>' + inner + '</div>';
+}
+function bindPeek(root){
+  root.addEventListener("click", (e)=>{
+    const img = e.target.closest(".peek img");
+    if(img){ openLightbox(img.src); return; }
+    const b = e.target.closest(".peek-btn");
+    if(!b) return;
+    const box = b.nextElementSibling;
+    const open = box.hidden;
+    box.hidden = !open;
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    b.textContent = open ? "🔍 中身をとじる" : "🔍 中身を見る";
+  });
+}
+
 // ---- 正解登録の一覧画面 ----
 function renderList(){
   const {kaiFrom, kaiTo} = readRange();
@@ -583,15 +625,16 @@ function renderList(){
   els["list-body"].innerHTML = pool.map((idx,i)=>{
     const d = getQ(idx);
     const on = isSolved(d.id);
-    return '<label class="list-item' + (on ? " solved" : "") + '" data-id="' + escapeHtml(d.id) + '">'
+    return '<div class="list-row"><label class="list-item' + (on ? " solved" : "") + '" data-id="' + escapeHtml(d.id) + '">'
       + '<input type="checkbox"' + (on ? " checked" : "") + '>'
       + '<span class="li-body">'
       + '<span class="li-head">No.' + (i+1) + '　' + escapeHtml(d.u) + (d.note ? '　（' + escapeHtml(d.note) + '）' : '') + '</span>'
       + '<span class="li-q">' + escapeHtml(d.q.length > 70 ? d.q.slice(0,70) + "…" : d.q) + '</span>'
-      + '</span></label>';
+      + '</span></label>' + peekHtml(d, idx) + '</div>';
   }).join("");
   renderListStatOnly();
 }
+bindPeek(els["list-body"]);
 // チェックはその場で保存する（保存ボタンの押し忘れを防ぐ）
 els["list-body"].addEventListener("change", (e)=>{
   const box = e.target;
@@ -606,7 +649,7 @@ function renderListStatOnly(){
   const {kaiFrom, kaiTo} = readRange();
   const pool = buildCalcPool(kaiFrom, kaiTo, false);
   const solved = pool.filter(i => isSolved(QA_DATA[i].id)).length;
-  els["list-stat-line"].textContent = pool.length + "問中 " + solved + "問 正解ずみ。チェックを付け外しすると、その場で保存されます。";
+  els["list-stat-line"].textContent = "正解ずみ " + solved + " / " + pool.length + "問（のこり " + (pool.length - solved) + "問）　※付け外しはその場で保存";
 }
 els["open-list-btn"].addEventListener("click", ()=>{
   renderList();
@@ -975,28 +1018,39 @@ function dailyRefresh(){
 }
 
 // ---- ◎をつける ----
+function sheetTitle(sh){
+  const ms = sh.ids.map(id => (sh.marks && sh.marks[id] || {}).r || "");
+  const cnt = r => ms.filter(x => x === r).length;
+  const m = /^\d+-(\d+)-(\d+)(?:-(\d+))?$/.exec(sh.id);
+  const label = m ? (parseInt(m[1],10) + "/" + parseInt(m[2],10) + (m[3] ? "（" + m[3] + "回目）" : "")) : sh.id;
+  return label + " のプリント　" + sh.ids.length + "問　◎" + cnt("◎") + " △" + cnt("△") + " ✕" + cnt("✕") + " 未" + ms.filter(x => !x).length;
+}
+function marksStatText(daily){
+  const sh = todaySheet(daily) || daily.sheets[daily.sheets.length-1];
+  if(!sh) return "";
+  const n = sh.ids.filter(id => (sh.marks && sh.marks[id] || {}).r).length;
+  return "いちばん新しいプリント：" + n + " / " + sh.ids.length + "問 ◎などをつけました";
+}
 function renderMarks(){
   const daily = dailyLoad();
   const body = document.getElementById("marks-body");
   if(!daily.sheets.length){ body.innerHTML = '<div class="daily-note">まだ印刷した回がありません。</div>'; return; }
-  const byId = {}; QA_DATA.forEach(d => { byId[d.id] = d; });
+  const byId = {}, idxOf = {}; QA_DATA.forEach((d,i) => { byId[d.id] = d; idxOf[d.id] = i; });
   body.innerHTML = daily.sheets.slice().reverse().map((sh, k)=>{
-    const ms = sh.ids.map(id => (sh.marks && sh.marks[id] || {}).r || "");
-    const cnt = r => ms.filter(x => x === r).length;
-    const m = /^\d+-(\d+)-(\d+)(?:-(\d+))?$/.exec(sh.id);
-    const label = m ? (parseInt(m[1],10) + "/" + parseInt(m[2],10) + (m[3] ? "（" + m[3] + "回目）" : "")) : sh.id;
-    const title = label + " のプリント　" + sh.ids.length + "問　◎" + cnt("◎") + " △" + cnt("△") + " ✕" + cnt("✕") + " 未" + ms.filter(x => !x).length;
-    return '<details class="mk-sheet"' + (k === 0 ? " open" : "") + '><summary>' + escapeHtml(title) + '</summary>'
+    const title = sheetTitle(sh);
+    return '<details class="mk-sheet" data-sheet="' + escapeHtml(sh.id) + '"' + (k === 0 ? " open" : "") + '><summary>' + escapeHtml(title) + '</summary>'
       + sh.ids.map((id, i)=>{
           const d = byId[id]; if(!d) return "";
           const cur = (sh.marks && sh.marks[id] || {}).r || "";
           return '<div class="mk-row"><div class="mk-head">No.' + (i+1) + '　' + escapeHtml(d.u) + '</div>'
             + '<div class="mk-q">' + escapeHtml(d.q.length > 60 ? d.q.slice(0,60) + "…" : d.q) + '</div>'
-            + '<div class="mk-btns">' + MARK_SYMS.map(r => '<button type="button" class="mk-btn' + (cur === r ? " on" : "") + '" data-sheet="' + escapeHtml(sh.id) + '" data-q="' + escapeHtml(id) + '" data-r="' + r + '">' + r + '</button>').join("") + '</div></div>';
+            + '<div class="mk-btns">' + MARK_SYMS.map(r => '<button type="button" class="mk-btn' + (cur === r ? " on" : "") + '" data-sheet="' + escapeHtml(sh.id) + '" data-q="' + escapeHtml(id) + '" data-r="' + r + '">' + r + '</button>').join("") + '</div>'
+            + peekHtml(d, idxOf[id]) + '</div>';
         }).join("")
       + '</details>';
   }).join("");
 }
+bindPeek(document.getElementById("marks-body"));
 document.getElementById("marks-body").addEventListener("click", (e)=>{
   const b = e.target.closest(".mk-btn");
   if(!b) return;
@@ -1010,14 +1064,17 @@ function setMark(sheetId, qid, r){
   sh.marks = sh.marks || {};
   sh.marks[qid] = { r: r, t: Date.now() };
   if(!dailySave(daily)){ alert("この端末に保存できませんでした。"); return; }
-  const open = Array.from(document.querySelectorAll("#marks-body details")).map(x => x.open);
-  renderMarks();
-  document.querySelectorAll("#marks-body details").forEach((x,i)=>{ if(open[i] !== undefined) x.open = open[i]; });
+  // 全体を描き直さない（画面の位置・開いているパネル・中身を見る を保つ）。押した行のボタンと見出しだけ変える
+  document.querySelectorAll('#marks-body .mk-btn[data-sheet="' + CSS.escape(sheetId) + '"][data-q="' + CSS.escape(qid) + '"]').forEach(b => b.classList.toggle("on", b.dataset.r === r));
+  const det = Array.from(document.querySelectorAll("#marks-body details")).find(x => x.dataset.sheet === sheetId);
+  if(det){ const sm = det.querySelector("summary"); if(sm) sm.textContent = sheetTitle(sh); }
+  document.getElementById("marks-stat").textContent = marksStatText(daily);
   sendSheet(sh);
   dailyRefresh();
 }
 document.getElementById("daily-marks-btn").addEventListener("click", ()=>{
   renderMarks();
+  document.getElementById("marks-stat").textContent = marksStatText(dailyLoad());
   els["screen-setup"].style.display = "none";
   document.getElementById("screen-marks").style.display = "block";
   window.scrollTo(0,0);
