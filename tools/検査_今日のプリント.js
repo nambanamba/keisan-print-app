@@ -81,8 +81,8 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   let ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   let page = await newPage(ctx);
   const reqs = []; page.on("request", r => { if(!r.url().startsWith("http://127.0.0.1:" + sp)) reqs.push(r.url()); });
-  ok(await page.evaluate(() => QA_DATA.length) === 82, "問題は82問（既存77＋第6回5）");
-  ok(await page.evaluate(() => QA_DATA.slice(0, 77).every(d => /^r[12]c\d+$/.test(d.id)) && QA_DATA.slice(77).map(d => d.id).join() === "r6c01,r6c02,r6c03,r6c04,r6c05"), "既存77問はそのまま・第6回は後ろに足してある");
+  ok(await page.evaluate(() => QA_DATA.length) === 93, "問題は93問（既存77＋第6回5＋第7回11）");
+  ok(await page.evaluate(() => QA_DATA.slice(0, 77).every(d => /^r[12]c\d+$/.test(d.id)) && QA_DATA.slice(77, 82).map(d => d.id).join() === "r6c01,r6c02,r6c03,r6c04,r6c05" && QA_DATA.slice(82).map(d => d.id).join() === "r7c01,r7c02,r7c03,r7c04,r7c05,r7c06,r7c07,r7c08,r7c09,r7c10,r7c11"), "既存77問・第6回5問はそのまま・第7回は後ろに足してある");
   await page.screenshot({ path: path.join(OUT, "01_ホーム.png"), fullPage: true });
   await page.click("#daily-print-btn");
   await page.waitForFunction(() => window.__printed === 1);
@@ -256,7 +256,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   const r6 = await page.evaluate(async () => {
     const q = id => QA_DATA.find(d => d.id === id);
     const imgOk = f => new Promise(r => { const i = new Image(); i.onload = () => r(i.naturalWidth > 0); i.onerror = () => r(false); i.src = "images/" + f; });
-    const lv = QA_DATA.slice(77).map(d => d.level).join();
+    const lv = QA_DATA.slice(77, 82).map(d => d.level).join();
     const now = Date.now(), none = { sheets: [] };
     const A = pickDaily(4, [{ name: "呼吸・循環", count: 3 }, { name: "てこ", count: 1 }], now, none, null, []);
     const B = pickDaily(4, [{ name: "呼吸・循環", count: 3 }, { name: "てこ", count: 1 }], now, none, null, ["発展"]);
@@ -264,9 +264,13 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
     const D = pickDaily(6, [], now, none, null, ["発展"]);
     const cl = JSON.stringify(planClean({ units: [{ name: "てこ", count: 1 }, "中和", { bad: 1 }], exclude_levels: ["発展", 3, ""], count: 4 }));
     const un = id => (q(id) || {}).u;
-    return { imgs: [await imgOk("r6c_01.jpg"), await imgOk("r6c_02.jpg")], img12: [q("r6c01").img, q("r6c02").img, q("r6c03").img], lv, A, B, C, D, cl,
+    const E = pickDaily(4, [{ name: "物の燃焼", count: 4 }], now, none, null, []);
+    const r7img = [await imgOk("r7c_01.jpg"), await imgOk("r7c_02.jpg")];
+    return { E, r7img, imgs: [await imgOk("r6c_01.jpg"), await imgOk("r6c_02.jpg")], img12: [q("r6c01").img, q("r6c02").img, q("r6c03").img], lv, A, B, C, D, cl,
       aU: A.map(un), bU: B.map(un), lvOf: id => 0 };
   });
+  ok(r6.E.length === 4 && r6.E.every(id => /^r7c/.test(id)), "units に 物の燃焼×4 と書けば今日のプリントに第7回が入る", JSON.stringify(r6.E));
+  ok(r6.r7img[0] && r6.r7img[1], "第7回の図2枚が読める（r7c_01・r7c_02）");
   ok(r6.imgs[0] && r6.imgs[1] && r6.img12[0] === "r6c_01.jpg" && r6.img12[1] === "r6c_02.jpg" && !r6.img12[2], "第6回の図2枚が読める（r6c01・r6c02）。r6c03〜05 は図なし");
   ok(r6.lv === "標準,標準,発展,発展,発展", "r6c03〜05 は level 発展", r6.lv);
   ok(r6.A.filter(id => /^r6c/.test(id)).length === 3 && r6.A.filter(id => /^r[12]c/.test(id) && !/^r6c/.test(id)).length === 1, "units に数を書くと、呼吸・循環3問＋てこ1問になる", JSON.stringify(r6.aU));
