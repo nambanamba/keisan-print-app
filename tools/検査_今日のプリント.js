@@ -81,13 +81,13 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   let ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   let page = await newPage(ctx);
   const reqs = []; page.on("request", r => { if(!r.url().startsWith("http://127.0.0.1:" + sp)) reqs.push(r.url()); });
-  ok(await page.evaluate(() => QA_DATA.length) === 107, "問題は107問（既存77＋第6回5＋第7回11＋第8回14）");
-  ok(await page.evaluate(() => QA_DATA.slice(0, 77).every(d => /^r[12]c\d+$/.test(d.id)) && QA_DATA.slice(77, 82).map(d => d.id).join() === "r6c01,r6c02,r6c03,r6c04,r6c05" && QA_DATA.slice(82, 93).map(d => d.id).join() === "r7c01,r7c02,r7c03,r7c04,r7c05,r7c06,r7c07,r7c08,r7c09,r7c10,r7c11" && QA_DATA.slice(93).map(d => d.id).join() === "r8c01,r8c02,r8c03,r8c04,r8c05,r8c06,r8c07,r8c08,r8c09,r8c10,r8c11,r8c12,r8c13,r8c14"), "既存77問・第6回5問・第7回11問はそのまま・第8回は後ろに足してある");
+  ok(await page.evaluate(() => QA_DATA.length) === 117, "問題は117問（既存77＋第6回5＋第7回11＋第8回14＋多段10）");
+  ok(await page.evaluate(() => QA_DATA.slice(0, 77).every(d => /^r[12]c\d+$/.test(d.id)) && QA_DATA.slice(77, 82).map(d => d.id).join() === "r6c01,r6c02,r6c03,r6c04,r6c05" && QA_DATA.slice(82, 93).map(d => d.id).join() === "r7c01,r7c02,r7c03,r7c04,r7c05,r7c06,r7c07,r7c08,r7c09,r7c10,r7c11" && QA_DATA.slice(93, 107).map(d => d.id).join() === "r8c01,r8c02,r8c03,r8c04,r8c05,r8c06,r8c07,r8c08,r8c09,r8c10,r8c11,r8c12,r8c13,r8c14"), "既存77問・第6回5問・第7回11問はそのまま・第8回は後ろに足してある");
   await page.screenshot({ path: path.join(OUT, "01_ホーム.png"), fullPage: true });
   await page.click("#daily-print-btn");
   await page.waitForFunction(() => window.__printed === 1);
   let d = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
-  ok(d.sheets.length === 1 && d.sheets[0].ids.length === 4, "既定4問のプリントができた", JSON.stringify(d.sheets[0] && d.sheets[0].ids));
+  ok(d.sheets.length === 1 && d.sheets[0].ids.length === 5 && d.sheets[0].ids.filter(id => /^r[78]d/.test(id)).length === 1, "既定4問＋多段1問のプリントができた", JSON.stringify(d.sheets[0] && d.sheets[0].ids));
   const sheet1 = d.sheets[0];
   const units = await page.evaluate(ids => ids.map(id => QA_DATA.find(x => x.id === id).u), sheet1.ids);
   ok(Math.max(...Object.values(units.reduce((a, u) => (a[u] = (a[u] || 0) + 1, a), {}))) <= 2, "同じ単元は2問まで（4問のとき）", JSON.stringify(units));
@@ -178,7 +178,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   await page.click("#daily-print-btn");
   await page.waitForFunction(() => window.__printed === 1);
   d = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
-  ok(d.sheets[0].ids.length === 5, "plan の count=5 が既定になる");
+  ok(d.sheets[0].ids.length === 6, "plan の count=5（＋多段1問）が既定になる");
   const dk = d.sheets[0].date, sid = d.sheets[0].id;
   await page.click("#daily-marks-btn");
   await page.click('.mk-sheet[open] .mk-row:nth-of-type(1) .mk-btn[data-r="◎"]');
@@ -296,7 +296,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   await page.click("#daily-print-btn");
   await page.waitForFunction(() => window.__printed === 1);
   d = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
-  ok(d.sheets[0].ids.length === 4 && d.sheets[0].ids.every(id => !["r6c03","r6c04","r6c05"].includes(id)) && d.sheets[0].ids.includes("r6c01"), "今日のプリントに発展は入らず、第6回の標準が入る", JSON.stringify(d.sheets[0].ids));
+  ok(d.sheets[0].ids.length === 5 && d.sheets[0].ids.every(id => !["r6c03","r6c04","r6c05"].includes(id)) && d.sheets[0].ids.includes("r6c01"), "今日のプリントに発展は入らず、第6回の標準が入る", JSON.stringify(d.sheets[0].ids));
   await ctx.close();
 
   // ============ 5. 印刷の見本 ============
@@ -322,6 +322,52 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   const pdfPages = (fs.readFileSync(path.join(OUT, "今日のプリント_見本.pdf")).toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
   console.log("  PDF のページ数: " + pdfPages);
   await ctx.close();
+
+
+  // ============ 7. 多段の1問（2026-10-19）============
+  console.log("[7] 多段 1日1問");
+  {
+    ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
+    page = await newPage(ctx);
+    const r = await page.evaluate(() => {
+      const none = { sheets: [] };
+      const days = [];
+      for(let k = 0; k < 30; k++){
+        const now = Date.parse("2026-10-20T09:00:00+09:00") + k * 86400000;
+        const reg = pickDaily(4, [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], now, none, null, ["発展"]);
+        const t = pickTadan({ count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 }, now, none, null);
+        days.push({ reg, t, again: JSON.stringify(pickTadan({ count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 }, now, none, null)) === JSON.stringify(t) });
+      }
+      const lvOf = id => QA_DATA.find(d => d.id === id).level;
+      // ✕ の多段は同じ単元の中で先に出る
+      const dk = dayKeyOf(Date.parse("2026-10-20T09:00:00+09:00"));
+      const withX = { sheets: [{ id: "x", date: "2026-10-01", at: 1, ids: ["r8d04"], marks: { r8d04: { r: "✕", t: Date.parse("2026-10-18T00:00:00+09:00") } } }] };
+      const tx = pickTadan({ count: 1, main: "ばね・浮力・圧力" }, Date.parse("2026-10-20T09:00:00+09:00"), withX, null);
+      const redo = pickTadan({ count: 1, main: "ばね・浮力・圧力" }, Date.parse("2026-10-20T09:00:00+09:00"), none, ["r8d04"]);
+      const off = pickTadan({ count: 0 }, Date.now(), none, null);
+      const dflt = pickTadan(null, Date.now(), none, null);
+      const pc = planClean({ units: ["てこ"], count: 4, exclude_levels: ["発展"], tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 } });
+      const multi = QA_DATA.filter(d => d.level === "多段");
+      return { days, tadanOnly: days.every(x => x.t.length === 1 && lvOf(x.t[0]) === "多段"), regNone: days.every(x => x.reg.every(id => lvOf(id) !== "多段")),
+        kai8: days.filter(x => x.t[0].startsWith("r8d")).length, kai7: days.filter(x => x.t[0].startsWith("r7d")).length, stable: days.every(x => x.again), tx, redo, off, dflt: dflt.length, pc, nMulti: multi.length,
+        noteLeak: multi.filter(d => d.a && d.note.indexOf(d.a.split("　")[0]) >= 0).map(d => d.id), ex: days.slice(0,3) };
+    });
+    ok(r.nMulti === 10, "多段は10問");
+    ok(r.tadanOnly, "多段の1問は、毎日ちょうど1問・level=多段");
+    ok(r.regNone, "ふだんの4問に多段は入らない（exclude_levels に書かなくても）");
+    ok(r.kai8 > r.kai7 && r.kai7 >= 8 && r.kai7 <= 12, "今週(第8回)が中心・3日に1日だけ第7回（30日で第8回" + r.kai8 + "・第7回" + r.kai7 + "）");
+    ok(r.stable, "同じ日は同じ問題");
+    ok(r.tx[0] === "r8d04", "前回✕の多段が先に出る", JSON.stringify(r.tx));
+    ok(r.redo[0] !== "r8d04", "選び直しでは別の多段が出る", JSON.stringify(r.redo));
+    ok(r.off.length === 0 && r.dflt === 1, "count=0 なら出ない・plan が読めなければ既定1問");
+    ok(r.pc.tadan && r.pc.tadan.count === 1 && r.pc.tadan.main === "ばね・浮力・圧力" && r.pc.tadan.mix === "物の燃焼" && r.pc.tadan.mix_every === 3, "planClean: tadan を読む");
+    ok(r.noteLeak.length === 0, "多段の note に答えが出ていない（出典だけ）", r.noteLeak.join());
+    console.log("  例（3日ぶん）: " + JSON.stringify(r.ex));
+    // 実物で、プリントに多段が1問入り、答えの面に解き方が出る
+    mock.mode = "ok"; mock.plan = { units: [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], exclude_levels: ["発展"], count: 4, tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 } };
+    await page.evaluate(() => { localStorage.setItem("keisan_send_cfg_v1", ""); });
+    await ctx.close();
+  }
 
   await browser.close();
   staticSrv.close(); mockSrv.close();
