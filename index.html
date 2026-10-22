@@ -845,7 +845,7 @@ function historyOf(id, daily){
   return out;
 }
 function hashStr(s){ let h = 2166136261; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-const TADAN_LEVEL = "多段";   // 何段かで解く問題（演習の練習問題レベル）。1日1問、ふだんの数問とは別に足す
+const TADAN_LEVEL = "多段";   // 何段かで解く問題（演習の練習問題レベル）。多段の日は多段1問だけ（ふだんの日は数問だけ）
 function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
@@ -886,6 +886,16 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
 // plan.tadan = {count:1, main:"ばね・浮力・圧力", mix:"物の燃焼", mix_every:3}
 //   今週の単元(main)を中心に、mix_every 日に1日だけ前の単元(mix)をまぜる（日づけから決まるので、同じ日は同じ）。
 //   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → まだ → 7日以上前の◎ → 最近の◎。
+// 多段の日か？  日づけの通し番号を day_every で割った余りで決める（同じ日は何度作っても同じ・毎日ずれずに交互）。
+// day_every: 2 = 1日おき（既定）／3 = 3日に1回／1 = 毎日／0 = 多段の日なし
+function isTadanDay(tadan, nowMs){
+  const t = tadan || {};
+  let ev = parseInt(t.day_every, 10); if(isNaN(ev) || ev < 0 || ev > 14) ev = 2;
+  if(ev === 0) return false;
+  const d = new Date(nowMs || Date.now());
+  const dn = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+  return dn % ev === 0;
+}
 function pickTadan(tadan, nowMs, daily, exclude){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
@@ -931,7 +941,8 @@ function planClean(j){
     let c = parseInt(j.tadan.count, 10); if(isNaN(c) || c < 0 || c > 2) c = 1;
     const s30 = v => typeof v === "string" && v.trim() ? v.trim().slice(0,30) : "";
     let ev = parseInt(j.tadan.mix_every, 10); if(isNaN(ev) || ev < 2 || ev > 14) ev = 0;
-    tadan = { count: c, main: s30(j.tadan.main), mix: s30(j.tadan.mix), mix_every: ev };
+    let de = parseInt(j.tadan.day_every, 10); if(isNaN(de) || de < 0 || de > 14) de = 2;
+    tadan = { count: c, main: s30(j.tadan.main), mix: s30(j.tadan.mix), mix_every: ev, day_every: de };
   }
   return { units: units, count: count, excludeLevels: excludeLevels, tadan: tadan };
 }
@@ -986,8 +997,11 @@ async function dailyMakeSheet(redo){
   const daily = dailyLoad();
   const count = dailyCount();
   const cur = redo ? todaySheet(daily) : null;
-  const ids = pickDaily(count, dailyPlan ? dailyPlan.units : [], Date.now(), daily, cur ? cur.ids : null, dailyPlan ? dailyPlan.excludeLevels : [])
-    .concat(pickTadan(dailyPlan ? dailyPlan.tadan : null, Date.now(), daily, cur ? cur.ids : null));   // ＋多段の1問（いちばん後ろ）
+  // 多段の日＝多段1問だけ／ふつうの日＝いつもの数問だけ（負荷を上げない）
+  const tp = dailyPlan ? dailyPlan.tadan : null;
+  const ids = isTadanDay(tp, Date.now())
+    ? pickTadan(tp, Date.now(), daily, cur ? cur.ids : null)
+    : pickDaily(count, dailyPlan ? dailyPlan.units : [], Date.now(), daily, cur ? cur.ids : null, dailyPlan ? dailyPlan.excludeLevels : []);
   const dk = dayKeyOf();
   const sheet = { id: newSheetId(daily, dk), date: dk, at: Date.now(), ids: ids, marks: {} };
   daily.sheets.push(sheet);
@@ -1046,8 +1060,8 @@ function dailyRefresh(){
   const n = dailyCount();
   document.querySelectorAll("#daily-count-chips .chip").forEach(c => c.classList.toggle("active", parseInt(c.dataset.n,10) === n));
   const pn = document.getElementById("daily-plan-note");
-  pn.textContent = dailyPlan && (dailyPlan.units.length || dailyPlan.excludeLevels.length)
-    ? "優先する単元：" + dailyPlan.units.map(u => u.name + (u.count ? "×" + u.count : "")).join("、") + (dailyPlan.excludeLevels && dailyPlan.excludeLevels.length ? "／自動では出さない：" + dailyPlan.excludeLevels.join("、") : "") + (dailyPlan.tadan && dailyPlan.tadan.count ? "／多段" + dailyPlan.tadan.count + "問を別に追加" : "") + "（司令塔の指定）"
+  pn.textContent = dailyPlan && (dailyPlan.units.length || dailyPlan.excludeLevels.length || dailyPlan.tadan)
+    ? "優先する単元：" + dailyPlan.units.map(u => u.name + (u.count ? "×" + u.count : "")).join("、") + (dailyPlan.excludeLevels && dailyPlan.excludeLevels.length ? "／自動では出さない：" + dailyPlan.excludeLevels.join("、") : "") + (dailyPlan.tadan && dailyPlan.tadan.count ? "／多段の日（" + (dailyPlan.tadan.day_every === 0 ? "なし" : dailyPlan.tadan.day_every === 1 ? "毎日" : dailyPlan.tadan.day_every + "日に1回") + "）は多段" + dailyPlan.tadan.count + "問だけ" : "") + "（司令塔の指定）"
     : "優先する単元：指定なし（全単元から。✕だった問題・まだやっていない問題を先に出します）";
   const daily = dailyLoad(), sh = todaySheet(daily);
   const tn = document.getElementById("daily-today-note");
