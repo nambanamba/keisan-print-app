@@ -845,7 +845,26 @@ function historyOf(id, daily){
   return out;
 }
 function hashStr(s){ let h = 2166136261; for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-const TADAN_LEVEL = "多段";   // 何段かで解く問題（演習の練習問題レベル）。多段の日は多段1問だけ（ふだんの日は数問だけ）
+const TADAN_LEVEL = "多段";   // 何段かで解く問題（演習の練習問題レベル）。多段の日は「2段×2問＋3段以上×1問」だけ（ふつうの日は数問だけ）
+// 多段の段数（2026-10-24 ユーザー決定「計算プリントは毎日、2段で解ける問題を2問＋3段以上を1問」）。
+//   2 = 2段で解ける（計算が2回まで）／3 = 3段以上。ここに無い多段は 3 とみなす（新しく足したらここに書く）
+const TADAN_DAN = {
+  r7d01: 3,   // 結びついた酸素 7−6 → その酸素と結びつく銅 4g → 残り 6−4
+  r7d02: 3,   // 銅・マグネシウムの酸素を出す → 酸素1gあたりにそろえる → 比（4段）
+  r7d03: 3,   // ①酸素 1.6g → 比 8：3 を出す → ②銅 6.4g（4段）
+  r7d04: 3,   // 燃やす前 34g → 酸素 0.1g → 結びついた銅 0.4g → 残り 1.6g
+  r7d05: 3,   // すべて銅とした重さ → ちがい → 1gあたりの差 → つるかめ（5段）
+  r8d01: 2,   // かかる力 100−40＝60g → のび 2×60/50
+  r8d02: 2,   // 浮力 1×100＝100g → ひも 140−100
+  r8d03: 2,   // 圧力 150÷10＝15g → X＝15×50
+  r8d04: 2,   // 1cmあたり 30÷2＝15g → 15×7
+  r8d05: 3,   // a ごとに B・C の浮力を引いて出し、同じになる a をさがす
+  r8d06: 3,   // A₅・A₆・A₇ の3本にかかる力を出して比べる
+  r8d07: 3,   // のび 4cm → 1本 18＋4 → 2本 ×2
+  r8d08: 2,   // 浮力 10÷2×1＝5g → 100−5
+  r8d09: 2    // 400＋140＋100 の足し算1つ（重さが全部台ばかりにかかると分かれば1式）
+};
+function tadanDan(id){ return TADAN_DAN[id] === 2 ? 2 : 3; }
 function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
@@ -853,7 +872,7 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   const uq = (units || []).map(u => typeof u === "string" ? { name: u, count: 0 } : (u && typeof u.name === "string" ? { name: u.name, count: parseInt(u.count, 10) || 0 } : null)).filter(u => u && u.name);
   units = uq.map(u => u.name);
   const exLv = (excludeLevels || []).filter(x => typeof x === "string" && x);
-  if(exLv.indexOf(TADAN_LEVEL) < 0) exLv.push(TADAN_LEVEL);   // 多段は「1日1問」を別に選ぶので、ふだんの数問からは必ず外す
+  if(exLv.indexOf(TADAN_LEVEL) < 0) exLv.push(TADAN_LEVEL);   // 多段は多段の日に別に選ぶので、ふだんの数問からは必ず外す
   const dk = dayKeyOf(nowMs);
   const isPrio = d => units.some(u => d.u.indexOf(u) >= 0);
   // level が除外指定のものは、自動では選ばない（手で選ぶのは可）
@@ -887,10 +906,11 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
 //   今週の単元(main)を中心に、mix_every 日に1日だけ前の単元(mix)をまぜる（日づけから決まるので、同じ日は同じ）。
 //   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → 出しどきの◎（3日・7日あけて、◎3回まで） → まだ → 7日以上前の◎ → 最近の◎。
 // 多段の日か？  日づけの通し番号を day_every で割った余りで決める（同じ日は何度作っても同じ・毎日ずれずに交互）。
-// day_every: 2 = 1日おき（既定）／3 = 3日に1回／1 = 毎日／0 = 多段の日なし
+// day_every: 1 = 毎日（既定）／2 = 1日おき／3 = 3日に1回／0 = 多段の日なし
+//   2026-10-24 ユーザー決定「計算プリントは毎日 多段（2段×2＋3段以上×1）。1回の計算の4問は暗記カードへ」で既定を 2 → 1 に
 function isTadanDay(tadan, nowMs){
   const t = tadan || {};
-  let ev = parseInt(t.day_every, 10); if(isNaN(ev) || ev < 0 || ev > 14) ev = 2;
+  let ev = parseInt(t.day_every, 10); if(isNaN(ev) || ev < 0 || ev > 14) ev = 1;
   if(ev === 0) return false;
   const d = new Date(nowMs || Date.now());
   const dn = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
@@ -909,18 +929,24 @@ function tadanReviewRank(h, nowMs){
   if(streak >= 1 && streak <= TADAN_GAPS.length) return days >= TADAN_GAPS[streak-1] - 0.5 ? 1.5 : 5;
   return days >= 7 ? 3 : 5;
 }
+// 多段の日の紙: 2段の問題から count2 問（既定2）＋3段以上の問題から count3 問（既定1）。count が 0 なら出さない
 function pickTadan(tadan, nowMs, daily, exclude){
+  const t = tadan || { count: 1 };
+  if(!(parseInt(t.count, 10) > 0)) return [];
+  const num = (v, dflt, max) => { const x = parseInt(v, 10); return isNaN(x) || x < 0 || x > max ? dflt : x; };
+  const n2 = num(t.count2, 2, 3), n3 = num(t.count3, 1, 2);
+  return pickTadanGroup(t, n2, 2, nowMs, daily, exclude).concat(pickTadanGroup(t, n3, 3, nowMs, daily, exclude));
+}
+function pickTadanGroup(t, n, dan, nowMs, daily, exclude){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
-  const t = tadan || { count: 1 };
-  const n = Math.max(0, Math.min(2, parseInt(t.count, 10) || 0));
   if(!n) return [];
   const dk = dayKeyOf(nowMs);
   const every = parseInt(t.mix_every, 10) || 0;
   const useMix = !!(t.mix && every > 0 && hashStr(dk) % every === 0);
   const want = (useMix ? t.mix : t.main) || "";
   const items = QA_DATA.map((d,i)=>{
-    if(d.level !== TADAN_LEVEL) return null;
+    if(d.level !== TADAN_LEVEL || tadanDan(d.id) !== dan) return null;
     const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
     let rank;
     if(last && last.r === "✕") rank = 0;
@@ -952,10 +978,12 @@ function planClean(j){
   let tadan = null;
   if(j.tadan && typeof j.tadan === "object"){
     let c = parseInt(j.tadan.count, 10); if(isNaN(c) || c < 0 || c > 2) c = 1;
+    let c2 = parseInt(j.tadan.count2, 10); if(isNaN(c2) || c2 < 0 || c2 > 3) c2 = 2;
+    let c3 = parseInt(j.tadan.count3, 10); if(isNaN(c3) || c3 < 0 || c3 > 2) c3 = 1;
     const s30 = v => typeof v === "string" && v.trim() ? v.trim().slice(0,30) : "";
     let ev = parseInt(j.tadan.mix_every, 10); if(isNaN(ev) || ev < 2 || ev > 14) ev = 0;
-    let de = parseInt(j.tadan.day_every, 10); if(isNaN(de) || de < 0 || de > 14) de = 2;
-    tadan = { count: c, main: s30(j.tadan.main), mix: s30(j.tadan.mix), mix_every: ev, day_every: de };
+    let de = parseInt(j.tadan.day_every, 10); if(isNaN(de) || de < 0 || de > 14) de = 1;
+    tadan = { count: c, count2: c2, count3: c3, main: s30(j.tadan.main), mix: s30(j.tadan.mix), mix_every: ev, day_every: de };
   }
   return { units: units, count: count, excludeLevels: excludeLevels, tadan: tadan };
 }
@@ -1010,7 +1038,7 @@ async function dailyMakeSheet(redo){
   const daily = dailyLoad();
   const count = dailyCount();
   const cur = redo ? todaySheet(daily) : null;
-  // 多段の日＝多段1問だけ／ふつうの日＝いつもの数問だけ（負荷を上げない）
+  // 多段の日＝多段（2段×2問＋3段以上×1問）だけ／ふつうの日＝いつもの数問だけ。2026-10-24〜 既定は毎日 多段の日
   const tp = dailyPlan ? dailyPlan.tadan : null;
   const ids = isTadanDay(tp, Date.now())
     ? pickTadan(tp, Date.now(), daily, cur ? cur.ids : null)
@@ -1074,7 +1102,7 @@ function dailyRefresh(){
   document.querySelectorAll("#daily-count-chips .chip").forEach(c => c.classList.toggle("active", parseInt(c.dataset.n,10) === n));
   const pn = document.getElementById("daily-plan-note");
   pn.textContent = dailyPlan && (dailyPlan.units.length || dailyPlan.excludeLevels.length || dailyPlan.tadan)
-    ? "優先する単元：" + dailyPlan.units.map(u => u.name + (u.count ? "×" + u.count : "")).join("、") + (dailyPlan.excludeLevels && dailyPlan.excludeLevels.length ? "／自動では出さない：" + dailyPlan.excludeLevels.join("、") : "") + (dailyPlan.tadan && dailyPlan.tadan.count ? "／多段の日（" + (dailyPlan.tadan.day_every === 0 ? "なし" : dailyPlan.tadan.day_every === 1 ? "毎日" : dailyPlan.tadan.day_every + "日に1回") + "）は多段" + dailyPlan.tadan.count + "問だけ" : "") + "（司令塔の指定）"
+    ? "優先する単元：" + dailyPlan.units.map(u => u.name + (u.count ? "×" + u.count : "")).join("、") + (dailyPlan.excludeLevels && dailyPlan.excludeLevels.length ? "／自動では出さない：" + dailyPlan.excludeLevels.join("、") : "") + (dailyPlan.tadan && dailyPlan.tadan.count ? "／多段の日（" + (dailyPlan.tadan.day_every === 0 ? "なし" : dailyPlan.tadan.day_every === 1 ? "毎日" : dailyPlan.tadan.day_every + "日に1回") + "）は多段（2段" + dailyPlan.tadan.count2 + "問＋3段以上" + dailyPlan.tadan.count3 + "問）だけ" : "") + "（司令塔の指定）"
     : "優先する単元：指定なし（全単元から。✕だった問題・まだやっていない問題を先に出します）";
   const daily = dailyLoad(), sh = todaySheet(daily);
   const tn = document.getElementById("daily-today-note");
