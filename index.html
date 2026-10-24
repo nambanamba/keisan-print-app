@@ -875,6 +875,20 @@ const TADAN_DAN = {
 };
 function tadanDan(id){ return TADAN_DAN[id] === 2 ? 2 : 3; }
 function isTadanQ(d){ return d.level === TADAN_LEVEL || Object.prototype.hasOwnProperty.call(TADAN_DAN, d.id); }   // 多段として出す問題
+// 暗算でできる1段の問題（2026-10-25 ユーザー決定「暗算でできるものは暗記カードへ、紙が要るものだけ1段の日に残す」）。
+//   第2回・第7回・第8回・第9回の1段のうち、紙（式・図をかく）が要らないもの52問。1段の日の自動の4問からは外す（データは消さない・手で選ぶのは可）。
+//   紙に残すのは r2c07,12,28,29,30,32,33,36,38〜41,43〜45,47,49〜52,64／r7c03,05,08,09／r8c02,03,04,07,08 の30問。発展（r2c65〜70・r8c10〜12）はもともと plan で自動に出さない
+const ANZAN_IDS = (function(){
+  const s = {};
+  const add = (kai, list) => list.forEach(n => { s["r" + kai + "c" + String(n).padStart(2, "0")] = 1; });
+  const range = (a, b) => { const r = []; for(let i = a; i <= b; i++) r.push(i); return r; };
+  add(2, [].concat(range(1,6), range(8,11), range(13,27), [31,34,35,37,42,46,48], range(53,63)));
+  add(7, [1,2,4]);
+  add(8, [1,5,6,9,13]);
+  add(9, [1]);
+  return s;
+})();
+function isAnzanQ(d){ return Object.prototype.hasOwnProperty.call(ANZAN_IDS, d.id); }   // 暗算→暗記カード（1段の日に自動では出さない）
 function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
@@ -887,7 +901,7 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   const isPrio = d => units.some(u => d.u.indexOf(u) >= 0);
   // level が除外指定のものは、自動では選ばない（手で選ぶのは可）
   const items = QA_DATA.map((d,i)=>{
-    if(exLv.indexOf(d.level) >= 0 || isTadanQ(d)) return null;
+    if(exLv.indexOf(d.level) >= 0 || isTadanQ(d) || isAnzanQ(d)) return null;   // 暗算の問題は暗記カードで（2026-10-25）
     const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
     let rank;
     if(last && last.r === "✕") rank = 0;

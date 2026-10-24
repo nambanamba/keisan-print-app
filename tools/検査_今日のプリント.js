@@ -153,7 +153,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   page = await newPage(ctx);
   const sel = await page.evaluate(() => {
     const now = Date.now(), day = 86400000;
-    const ids = QA_DATA.map(q => q.id);
+    const ids = QA_DATA.filter(q => !isAnzanQ(q) && !isTadanQ(q)).map(q => q.id);   // 暗算・多段は1段の日に出ないので、出せる問題だけで見る（2026-10-25）
     const mk = (id, r, ago) => ({ r, t: now - ago * day });
     const daily = { sheets: [{ id: "x", date: "2000-01-01", at: 0, ids: ids.slice(0, 6), marks: {
       [ids[10]]: mk(ids[10], "✕", 1), [ids[11]]: mk(ids[11], "△", 1), [ids[12]]: mk(ids[12], "◎", 30), [ids[13]]: mk(ids[13], "◎", 1) } }] };
@@ -461,6 +461,68 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
       ok(/日替わり/.test(await page.evaluate(() => document.getElementById("daily-plan-note").textContent)), "画面に「日替わり」の指定が出る");
       await ctx.close();
     }
+  }
+
+  // ============ 9. 暗算の問題は1段の日に出さない（2026-10-25 ユーザー決定「暗算はカード・紙が要るものだけ1段の日」）============
+  console.log("[9] 1段の日: 暗算の52問は出さない・紙の問題だけ");
+  {
+    ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
+    page = await newPage(ctx);
+    const PAPER = "r2c07,r2c12,r2c28,r2c29,r2c30,r2c32,r2c33,r2c36,r2c38,r2c39,r2c40,r2c41,r2c43,r2c44,r2c45,r2c47,r2c49,r2c50,r2c51,r2c52,r2c64,r7c03,r7c05,r7c08,r7c09,r8c02,r8c03,r8c04,r8c07,r8c08";
+    const r = await page.evaluate(PAPER => {
+      const paper = PAPER.split(",");
+      const anz = QA_DATA.filter(isAnzanQ).map(d => d.id);
+      // 第2・7・8・9回の1段（多段・発展をのぞく）＝ 暗算＋紙
+      const one = QA_DATA.filter(d => /^r[2789]c/.test(d.id) && !isTadanQ(d) && d.level !== "発展").map(d => d.id);
+      const split = one.every(id => (anz.indexOf(id) >= 0) !== (paper.indexOf(id) >= 0)) && one.length === anz.length + paper.length;
+      const perUnit = {}; paper.forEach(id => { const u = QA_DATA.find(d => d.id === id).u; perUnit[u] = (perUnit[u] || 0) + 1; });
+      // 今の本番 plan の形で、1段の日を 30 回（毎回 全部◎にする）。暗算が1つも出ないか・単元ごとに何問・何回目で紙の問題が一巡するか
+      const plans = {
+        now: [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }],
+        r9: [{ name: "流水と地層", count: 1 }, { name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }]
+      };
+      const out = {};
+      Object.keys(plans).forEach(k => {
+        const daily = { sheets: [] };
+        const base = Date.parse("2026-10-26T07:00:00+09:00");
+        const seen = {}, firstAll = {}, days = [];
+        for(let n = 0; n < 30; n++){
+          const now = base + n * 3 * 86400000;   // 1段の日は3日に1回
+          const ids = pickDaily(4, plans[k], now, daily, null, ["発展", "多段"]);
+          const marks = {}; ids.forEach(id => { marks[id] = { r: "◎", t: now }; seen[id] = 1; });
+          daily.sheets.push({ id: dayKeyOf(now), date: dayKeyOf(now), at: now, ids: ids, marks: marks });
+          days.push(ids);
+          ["てこ", "物の燃焼", "ばね・浮力・圧力"].forEach(u => { const all = paper.filter(id => QA_DATA.find(d => d.id === id).u.indexOf(u) >= 0); if(!firstAll[u] && all.every(id => seen[id])) firstAll[u] = n + 1; });
+        }
+        const flat = [].concat.apply([], days);
+        const cnt = {}; flat.forEach(id => { const u = QA_DATA.find(d => d.id === id).u.replace(/^第\d+回\./, ""); cnt[u] = (cnt[u] || 0) + 1; });
+        out[k] = { days: days.slice(0, 6), four: days.every(x => x.length === 4), noAnz: flat.every(id => anz.indexOf(id) < 0), onlyPaper: flat.every(id => paper.indexOf(id) >= 0 || !/^r[2789]c/.test(id)), cnt, firstAll };
+      });
+      return { nAnz: anz.length, nPaper: paper.length, nOne: one.length, split, perUnit, out, kept: ["r2c01", "r7c02", "r8c13", "r9c01"].every(id => QA_DATA.some(d => d.id === id)) };
+    }, PAPER);
+    ok(r.nAnz === 52 && r.nPaper === 30 && r.split, "第2・7・8・9回の1段 " + r.nOne + "問 ＝ 暗算52 ＋ 紙30（重なり・もれなし）", JSON.stringify([r.nAnz, r.nPaper, r.nOne]));
+    ok(r.kept, "暗算の問題もデータには残る（消していない）");
+    console.log("  紙の問題の数: " + JSON.stringify(r.perUnit));
+    ok(r.perUnit["第2回.てこ・滑車・輪軸"] === 21 && r.perUnit["第7回.物の燃焼"] === 4 && r.perUnit["第8回.ばね・浮力・圧力"] === 5 && !r.perUnit["第9回.流水と地層"], "紙はてこ21・燃焼4・ばね5・地層0");
+    for(const k of Object.keys(r.out)){
+      const o = r.out[k];
+      console.log("  plan " + k + ": はじめの6回 " + o.days.map(x => x.join(",")).join(" / "));
+      console.log("  plan " + k + ": 30回の内わけ " + JSON.stringify(o.cnt) + "／紙が一巡した回 " + JSON.stringify(o.firstAll));
+      ok(o.four, "plan " + k + ": 1段の日は毎回4問そろう");
+      ok(o.noAnz, "plan " + k + ": 暗算の問題は1度も出ない（30回）");
+      ok(o.onlyPaper, "plan " + k + ": 第2・7・8・9回からは紙の問題だけ");
+    }
+    // 実物: 1段の日の紙（本番 plan の形）
+    mock.mode = "ok"; mock.files = {}; mock.log = [];
+    mock.plan = { units: [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], exclude_levels: ["発展", "多段"], count: 4, tadan: { count: 1, main: "流水と地層", mix: "ばね・浮力・圧力", mix_every: 3, day_every: 1 } };
+    await setCfg(page, { token: TOKEN, api: API, repo: "owner/repo" });
+    await page.reload();
+    await page.click("#daily-print-btn");
+    await page.waitForFunction(() => window.__printed === 1);
+    const dd = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
+    const ids = dd.sheets[0].ids;
+    ok(ids.length === 4 && (await page.evaluate(ids => ids.every(id => !isAnzanQ(QA_DATA.find(d => d.id === id)) && !isTadanQ(QA_DATA.find(d => d.id === id))), ids)), "実物: 1段の日の紙は4問・暗算なし", JSON.stringify(ids));
+    await ctx.close();
   }
 
   await browser.close();
