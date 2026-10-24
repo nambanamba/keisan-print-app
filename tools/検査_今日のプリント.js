@@ -356,16 +356,17 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
       const dflt = pickTadan(null, Date.now(), none, null);
       const pc = planClean({ units: ["てこ"], count: 4, exclude_levels: ["発展"], tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 } });
       const multi = QA_DATA.filter(d => d.level === "多段");
-      const danOk = days.every(x => x.t.length === 3 && x.t.every(id => lvOf(id) === "多段") && tadanDan(x.t[0]) === 2 && tadanDan(x.t[1]) === 2 && tadanDan(x.t[2]) === 3 && x.t[0] !== x.t[1]);
+      const danOk = days.every(x => x.t.length === 3 && x.t.every(id => isTadanQ(QA_DATA.find(d => d.id === id))) && tadanDan(x.t[0]) === 2 && tadanDan(x.t[1]) === 2 && tadanDan(x.t[2]) === 3 && x.t[0] !== x.t[1]);
       const nDan2 = multi.filter(d => tadanDan(d.id) === 2).map(d => d.id).join(), unknownDan = multi.filter(d => !(d.id in TADAN_DAN)).map(d => d.id);
-      return { days, tadanOnly: danOk, nDan2, unknownDan, regNone: days.every(x => x.reg.every(id => lvOf(id) !== "多段")),
-        kai8: days.filter(x => x.t[2].startsWith("r8d")).length, kai7: days.filter(x => x.t[2].startsWith("r7d")).length, stable: days.every(x => x.again), tx, redo, off, dflt: dflt.length, pc, nMulti: multi.length,
+      return { days, tadanOnly: danOk, nDan2, unknownDan, regNone: days.every(x => x.reg.every(id => !isTadanQ(QA_DATA.find(d => d.id === id)))), moved: ["r7c06", "r7c07", "r7c10", "r7c11", "r8c14"].every(id => isTadanQ(QA_DATA.find(d => d.id === id)) && tadanDan(id) === 3),
+        kai8: days.filter(x => x.t[2].startsWith("r8")).length, kai7: days.filter(x => x.t[2].startsWith("r7")).length, stable: days.every(x => x.again), tx, redo, off, dflt: dflt.length, pc, nMulti: multi.length,
         noteLeak: multi.filter(d => d.a && d.note.indexOf(d.a.split("　")[0]) >= 0).map(d => d.id), ex: days.slice(0,3) };
     });
     ok(r.nMulti === 14, "多段は14問（第7回5・第8回9）");
     ok(r.tadanOnly, "多段は毎日3問: 2段・2段（ちがう問題）・3段以上の順・level=多段");
     ok(r.nDan2 === "r8d01,r8d02,r8d03,r8d04,r8d08,r8d09" && r.unknownDan.length === 0, "段数の仕分け: 2段は r8d01〜04・08・09、ほかは3段以上（14問すべてに印）", r.nDan2 + " / 印なし " + r.unknownDan.join());
-    ok(r.regNone, "ふだんの4問に多段は入らない（exclude_levels に書かなくても）");
+    ok(r.regNone, "ふだんの4問に多段（多段として出す5問も）は入らない（exclude_levels に書かなくても）");
+    ok(r.moved, "r7c06・07・10・11・r8c14 は3段以上の多段として出す");
     ok(r.kai8 > r.kai7 && r.kai7 >= 8 && r.kai7 <= 12, "3段以上の1問: 今週(第8回)が中心・3日に1日だけ第7回（30日で第8回" + r.kai8 + "・第7回" + r.kai7 + "）");
     ok(r.stable, "同じ日は同じ問題");
     ok(r.tx[0] === "r8d04", "前回✕の多段が先に出る", JSON.stringify(r.tx));
@@ -378,11 +379,13 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
     {
       const rr = await page.evaluate(() => {
         const T = s => Date.parse(s + "T09:00:00+09:00");
-        const mk = marks => ({ sheets: marks.map((m, i) => ({ id: "s" + i, date: m[0], at: T(m[0]), ids: ["r8d06"], marks: { r8d06: { r: m[1], t: T(m[0]) } } })) });
-        const pick = (marks, day) => pickTadan({ count: 1, main: "ばね・浮力・圧力" }, T(day), mk(marks), null)[2];   // r8d06 は3段以上（3問目の枠）
+        // ★2026-10-24〜「まだ」が出し直しより先。出し直しを見るため、第8回のほかの3段以上（r8d05・r8d07・r8c14）は前に◎3回で卒業させておく
+        const GRAD = ["2026-10-01", "2026-10-02", "2026-10-03"].map((day, j) => ({ id: "g" + j, date: day, at: T(day), ids: ["r8d05", "r8d07", "r8c14"], marks: { r8d05: { r: "◎", t: T(day) }, r8d07: { r: "◎", t: T(day) }, r8c14: { r: "◎", t: T(day) } } }));
+        const mk = (marks, noGrad) => ({ sheets: (noGrad ? [] : GRAD).concat(marks.map((m, i) => ({ id: "s" + i, date: m[0], at: T(m[0]), ids: ["r8d06"], marks: { r8d06: { r: m[1], t: T(m[0]) } } }))) });
+        const pick = (marks, day, noGrad) => pickTadan({ count: 1, main: "ばね・浮力・圧力" }, T(day), mk(marks, noGrad), null, "dan3")[0];   // r8d06 は3段以上
         const one = [["2026-10-20", "◎"]], two = [["2026-10-20", "◎"], ["2026-10-23", "◎"]], three = two.concat([["2026-10-30", "◎"]]);
         return {
-          d1: pick(one, "2026-10-21"), d3: pick(one, "2026-10-23"),
+          d1: pick(one, "2026-10-21"), d3: pick(one, "2026-10-23"), mada: pick(one, "2026-10-23", true),
           e4: pick(two, "2026-10-27"), e7: pick(two, "2026-10-30"),
           g3: pick(three, "2026-11-02"), g7: pick(three, "2026-11-06"),
           x: pick([["2026-10-20", "◎"], ["2026-10-22", "✕"]], "2026-10-23"),
@@ -390,12 +393,13 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
           rank: [tadanReviewRank([{ t: 0, r: "◎" }], 3 * 86400000), tadanReviewRank([{ t: 0, r: "◎" }], 1 * 86400000), tadanReviewRank([{ t: 0, r: "◎" }, { t: 1, r: "◎" }, { t: 2, r: "◎" }], 8 * 86400000)]
         };
       });
-      ok(rr.d1 !== "r8d06" && rr.d3 === "r8d06", "1回目の◎: 1日後は出ない・3日後にもう一度（まだの問より先）", JSON.stringify(rr));
+      ok(rr.d1 !== "r8d06" && rr.d3 === "r8d06", "1回目の◎: 1日後は出ない・3日後にもう一度", JSON.stringify(rr));
+      ok(rr.mada !== "r8d06" && /^r8/.test(rr.mada), "まだ出していない問題があれば、出し直しより先に出す", JSON.stringify(rr.mada));
       ok(rr.e4 !== "r8d06" && rr.e7 === "r8d06", "2回目の◎: 4日後は出ない・7日後にもう一度", JSON.stringify(rr));
       ok(rr.g3 !== "r8d06" && rr.g7 !== "r8d06", "◎3回で卒業: まだの問を先に出す", JSON.stringify(rr));
       ok(rr.x === "r8d06", "◎のあと✕なら先に出る");
       ok(rr.xr !== "r8d06" && rr.xr2 === "r8d06", "✕のあとの◎から数えなおし（3日あける）", JSON.stringify(rr));
-      ok(rr.rank[0] === 1.5 && rr.rank[1] === 5 && rr.rank[2] === 3, "tadanReviewRank の値", JSON.stringify(rr.rank));
+      ok(rr.rank[0] === 2.5 && rr.rank[1] === 5 && rr.rank[2] === 3, "tadanReviewRank の値", JSON.stringify(rr.rank));
     }
     // 実物で、プリントに多段が1問入り、答えの面に解き方が出る
     mock.mode = "ok"; mock.plan = { units: [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], exclude_levels: ["発展"], count: 4, tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3 } };
@@ -417,7 +421,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
         const now = base + k * 86400000;
         const kind = tadanDayKind(t, now);
         const ids = kind !== "normal" ? pickTadan(t, now, { sheets: [] }, null, kind) : pickDaily(4, [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], now, { sheets: [] }, null, ["発展"]);
-        days.push({ date: dayKeyOf(now), kind, ids, same: tadanDayKind(t, now) === kind, dans: ids.map(id => QA_DATA.find(d => d.id === id).level === "多段" ? tadanDan(id) : 1) });
+        days.push({ date: dayKeyOf(now), kind, ids, same: tadanDayKind(t, now) === kind, dans: ids.map(id => isTadanQ(QA_DATA.find(d => d.id === id)) ? tadanDan(id) : 1) });
       }
       const cnt = ev => { let n = 0; for(let k = 0; k < 27; k++) if(isTadanDay({ day_every: ev }, base + k * 86400000)) n++; return n; };
       return { days, c1: cnt(1), c2: cnt(2), c0: cnt(0), dflt: cnt(undefined), off: tadanDayKind({ count: 0 }, base), pc: planClean({ tadan: { count: 1, day_every: 3 } }).tadan.day_every, pcd: planClean({ tadan: { count: 1 } }).tadan.day_every,
@@ -448,7 +452,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
       const dans = await page.evaluate(ids => ids.map(id => tadanDan(id)), ids);
       const mixDay = await page.evaluate(() => hashStr(dayKeyOf(Date.now())) % 3 === 0);
       if(kind === "dan2") ok(ids.length === 2 && dans.every(n => n === 2) && ids.every(id => /^r8d/.test(id)), "2段の日: 2段の多段2問だけの紙", JSON.stringify(ids));
-      else ok(ids.length === 1 && dans[0] === 3 && (mixDay ? /^r7d/ : /^r8d/).test(ids[0]), "3段以上の日: 3段以上の1問だけの紙（" + (mixDay ? "まぜる日なので第7回" : "今週の第8回") + "）", JSON.stringify(ids));
+      else ok(ids.length === 1 && dans[0] === 3 && (mixDay ? /^r7/ : /^r8/).test(ids[0]) && (await page.evaluate(id => isTadanQ(QA_DATA.find(d => d.id === id)), ids[0])), "3段以上の日: 3段以上の1問だけの紙（" + (mixDay ? "まぜる日なので第7回" : "今週の第8回") + "）", JSON.stringify(ids));
       await page.emulateMedia({ media: "print" });
       const pdfName = kind === "dan2" ? "2段の日_見本.pdf" : "3段以上の日_見本.pdf";
       await page.pdf({ path: path.join(OUT, pdfName), format: "A4", printBackground: true, preferCSSPageSize: true });

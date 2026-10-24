@@ -862,9 +862,16 @@ const TADAN_DAN = {
   r8d06: 3,   // A₅・A₆・A₇ の3本にかかる力を出して比べる
   r8d07: 3,   // のび 4cm → 1本 18＋4 → 2本 ×2
   r8d08: 2,   // 浮力 10÷2×1＝5g → 100−5
-  r8d09: 2    // 400＋140＋100 の足し算1つ（重さが全部台ばかりにかかると分かれば1式）
+  r8d09: 2,   // 400＋140＋100 の足し算1つ（重さが全部台ばかりにかかると分かれば1式）
+  // 2026-10-24 ユーザー承認: level は多段でないが、解くのに3段以上かかる5問も3段以上の多段として出す（1段の日の4問からは外す）
+  r7c06: 3,   // 結びついた酸素 9.5−8 → その酸素と結びつく銅 → 残り
+  r7c07: 3,   // すべてマグネシウムとした重さ → ちがい → 1gあたりの差 → 銅
+  r7c10: 3,   // 3つの気体の体積 → それぞれの酸素 → 合計・熱の合計
+  r7c11: 3,   // メタン＝二酸化炭素 → 水素 → それぞれの酸素 → 合計
+  r8c14: 3    // 体積・高さ → しずんでいる体積 → 1cm³あたりの重さ
 };
 function tadanDan(id){ return TADAN_DAN[id] === 2 ? 2 : 3; }
+function isTadanQ(d){ return d.level === TADAN_LEVEL || Object.prototype.hasOwnProperty.call(TADAN_DAN, d.id); }   // 多段として出す問題
 function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   daily = daily || dailyLoad();
   nowMs = nowMs || Date.now();
@@ -877,7 +884,7 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
   const isPrio = d => units.some(u => d.u.indexOf(u) >= 0);
   // level が除外指定のものは、自動では選ばない（手で選ぶのは可）
   const items = QA_DATA.map((d,i)=>{
-    if(exLv.indexOf(d.level) >= 0) return null;
+    if(exLv.indexOf(d.level) >= 0 || isTadanQ(d)) return null;
     const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
     let rank;
     if(last && last.r === "✕") rank = 0;
@@ -904,7 +911,7 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
 // ---- 多段の1問（ふだんの数問とは別）----
 // plan.tadan = {count:1, main:"ばね・浮力・圧力", mix:"物の燃焼", mix_every:3}
 //   今週の単元(main)を中心に、mix_every 日に1日だけ前の単元(mix)をまぜる（日づけから決まるので、同じ日は同じ）。
-//   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → 出しどきの◎（3日・7日あけて、◎3回まで） → まだ → 7日以上前の◎ → 最近の◎。
+//   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → まだ → 出しどきの◎（3日・7日あけて、◎3回まで） → 7日以上前の◎ → 最近の◎。
 // 今日の紙の種類（2026-10-24 ユーザー決定）: 3種類の日替わり。日づけの通し番号を3で割った余りで決める（同じ日は何度作っても同じ）
 //   "normal" = 1段（1回の計算）の日＝いつもの数問（4問）／"dan2" = 2段の日＝2段の多段 count2 問（既定2）／"dan3" = 3段以上の日＝3段以上の多段 count3 問（既定1）
 //   順は 1段 → 2段 → 3段以上 → 1段 …（3日で1回り）。plan.tadan.day_every が 0 のときだけ多段の日なし（毎日 1段）。0 以外は日替わり
@@ -922,14 +929,14 @@ function isTadanDay(tadan, nowMs){ return tadanDayKind(tadan, nowMs) !== "normal
 // 日をあけて同じ多段を3回（2026-10-24 ユーザー決定「多段で解くものは計算プリントで定着」）
 //   いちど◎になった多段は、3日あけてもう一度、そのあと7日あけてもう一度出す（◎が3回つづいたら卒業＝前と同じ順）。
 //   ✕・△がついたら数えなおし（✕・△は rank 0・1 で先に出る）。記録は読むだけで、書き換えない。
-//   rank: 1.5 = 出しどき（✕・△のつぎ、まだ解いていない問より先）／5 = まだ早い／3 = 卒業して7日以上
+//   rank: 2.5 = 出しどき（まだ出していない問のつぎ。2026-10-24 ユーザー承認で「まだ」を先に）／5 = まだ早い／3 = 卒業して7日以上
 const TADAN_GAPS = [3, 7];   // 1回目の◎のあと3日、2回目の◎のあと7日
 function tadanReviewRank(h, nowMs){
   const last = h[h.length-1];
   let streak = 0;
   for(let i = h.length-1; i >= 0 && h[i].r === "◎"; i--) streak++;
   const days = (nowMs - last.t) / 86400000;
-  if(streak >= 1 && streak <= TADAN_GAPS.length) return days >= TADAN_GAPS[streak-1] - 0.5 ? 1.5 : 5;
+  if(streak >= 1 && streak <= TADAN_GAPS.length) return days >= TADAN_GAPS[streak-1] - 0.5 ? 2.5 : 5;
   return days >= 7 ? 3 : 5;
 }
 // 多段の紙: kind="dan2" → 2段の問題から count2 問（既定2）／kind="dan3" → 3段以上の問題から count3 問（既定1）／kind なし → 両方。count が 0 なら出さない
@@ -949,7 +956,7 @@ function pickTadanGroup(t, n, dan, nowMs, daily, exclude){
   const useMix = !!(t.mix && every > 0 && hashStr(dk) % every === 0);
   const want = (useMix ? t.mix : t.main) || "";
   const items = QA_DATA.map((d,i)=>{
-    if(d.level !== TADAN_LEVEL || tadanDan(d.id) !== dan) return null;
+    if(!isTadanQ(d) || tadanDan(d.id) !== dan) return null;
     const h = historyOf(d.id, daily), last = h.length ? h[h.length-1] : null;
     let rank;
     if(last && last.r === "✕") rank = 0;
