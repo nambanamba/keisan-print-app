@@ -9,7 +9,10 @@ const PW = process.env.PLAYWRIGHT_DIR || "C:/Users/mt-na/AppData/Roaming/npm/nod
 const { chromium } = require(PW);
 
 const ROOT = path.resolve(__dirname, "..");
-const OFFSET = (() => { const d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) % 2 === 0 ? 86400000 : 0; })();
+// 日づけの通し番号 %3 で「1段の日(0)・2段の日(1)・3段以上の日(2)」が決まる。kind の日になるまで時計を進める量
+const DAY_NO = (() => { const d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000); })();
+const offsetFor = kind => ((kind - DAY_NO % 3) + 3) % 3 * 86400000;
+const OFFSET = offsetFor(0);
 const OUT = path.join(__dirname, "_見本");
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -71,8 +74,8 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   const newPage = async (ctx, opts) => {
     const page = await ctx.newPage();
     page.on("pageerror", e => { fail++; console.log("  FAIL pageerror " + e.message); });
-    // 日づけで多段の日が変わるので、検査中は「ふつうの日」になるよう、時計を0〜1日だけ進める（多段の日の検査は [8] で別に行う）
-    await page.addInitScript(off => { const n = Date.now.bind(Date); Date.now = () => n() + off; }, OFFSET);
+    // 日づけで紙の種類が変わるので、検査中は「1段の日（ふつうの日）」になるよう、時計を0〜2日だけ進める（多段の日の検査は [8] で別に行う）
+    await page.addInitScript(off => { const n = Date.now.bind(Date); Date.now = () => n() + off; }, opts && opts.offset !== undefined ? opts.offset : OFFSET);
     await page.addInitScript(() => { window.__printed = 0; window.print = () => { window.__printed++; }; window.confirm = () => true; window.alert = () => {}; });
     await page.goto(BASE);
     return page;
@@ -91,8 +94,8 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   await page.waitForFunction(() => window.__printed === 1);
   let d = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
   ok(d.sheets.length === 1 && (await page.evaluate(() => isTadanDay(null, Date.now()))
-      ? d.sheets[0].ids.length === 3 && d.sheets[0].ids.every(id => /^r[78]d/.test(id))
-      : d.sheets[0].ids.length === 4 && d.sheets[0].ids.every(id => !/^r[78]d/.test(id))), "plan なし: 今日が多段の日なら多段3問だけ（2段2・3段以上1）／ふつうの日なら4問だけ", JSON.stringify(d.sheets[0] && d.sheets[0].ids));
+      ? d.sheets[0].ids.length <= 2 && d.sheets[0].ids.every(id => /^r[78]d/.test(id))
+      : d.sheets[0].ids.length === 4 && d.sheets[0].ids.every(id => !/^r[78]d/.test(id))), "plan なし: 今日が多段の日なら多段だけ（2段2問か3段以上1問）／1段の日なら4問だけ", JSON.stringify(d.sheets[0] && d.sheets[0].ids));
   const sheet1 = d.sheets[0];
   const units = await page.evaluate(ids => ids.map(id => QA_DATA.find(x => x.id === id).u), sheet1.ids);
   ok(Math.max(...Object.values(units.reduce((a, u) => (a[u] = (a[u] || 0) + 1, a), {}))) <= 2, "同じ単元は2問まで（4問のとき）", JSON.stringify(units));
@@ -330,7 +333,7 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
 
 
   // ============ 7. 多段の1問（2026-10-19）============
-  console.log("[7] 多段 1日3問（2段×2＋3段以上×1）");
+  console.log("[7] 多段の選び方（2段のグループ・3段以上のグループ。kind なしは両方）");
   {
     ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
     page = await newPage(ctx);
@@ -401,52 +404,59 @@ const TOKEN = "github_pat_TESTTOKEN0123456789";
   }
 
 
-  // ============ 8. 多段の日／ふつうの日（2026-10-22）============
-  console.log("[8] 多段の日＝多段3問だけ・ふつうの日＝4問だけ（既定は毎日 多段の日）");
+  // ============ 8. 日替わり（2026-10-24）: 1段の日＝4問／2段の日＝2段2問／3段以上の日＝3段以上1問 ============
+  console.log("[8] 日替わり: 1段の日4問 → 2段の日2問 → 3段以上の日1問");
   {
     ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
     page = await newPage(ctx);
     const r = await page.evaluate(() => {
-      const t = { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3, day_every: 2 };
+      const t = { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3, day_every: 2 };   // 今の本番 plan（day_every:2）でも日替わりになる
       const base = Date.parse("2026-10-23T09:00:00+09:00");
       const days = [];
-      for(let k = 0; k < 5; k++){
+      for(let k = 0; k < 9; k++){
         const now = base + k * 86400000;
-        const isT = isTadanDay(t, now);
-        const ids = isT ? pickTadan(t, now, { sheets: [] }, null) : pickDaily(4, [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], now, { sheets: [] }, null, ["発展"]);
-        days.push({ date: dayKeyOf(now), tadan: isT, ids, same: isTadanDay(t, now) === isT });
+        const kind = tadanDayKind(t, now);
+        const ids = kind !== "normal" ? pickTadan(t, now, { sheets: [] }, null, kind) : pickDaily(4, [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], now, { sheets: [] }, null, ["発展"]);
+        days.push({ date: dayKeyOf(now), kind, ids, same: tadanDayKind(t, now) === kind, dans: ids.map(id => QA_DATA.find(d => d.id === id).level === "多段" ? tadanDan(id) : 1) });
       }
-      const cnt = ev => { let n = 0; for(let k = 0; k < 28; k++) if(isTadanDay({ day_every: ev }, base + k * 86400000)) n++; return n; };
-      return { days, c1: cnt(1), c2: cnt(2), c3: cnt(3), c0: cnt(0), dflt: cnt(undefined), pc: planClean({ tadan: { count: 1, day_every: 3 } }).tadan.day_every, pcd: planClean({ tadan: { count: 1 } }).tadan.day_every };
+      const cnt = ev => { let n = 0; for(let k = 0; k < 27; k++) if(isTadanDay({ day_every: ev }, base + k * 86400000)) n++; return n; };
+      return { days, c1: cnt(1), c2: cnt(2), c0: cnt(0), dflt: cnt(undefined), off: tadanDayKind({ count: 0 }, base), pc: planClean({ tadan: { count: 1, day_every: 3 } }).tadan.day_every, pcd: planClean({ tadan: { count: 1 } }).tadan.day_every,
+        pcc: planClean({ tadan: { count: 1 } }).tadan, pcc2: planClean({ tadan: { count: 1, count2: 3, count3: 2 } }).tadan };
     });
-    r.days.forEach(x => console.log("  " + x.date + (x.tadan ? " 多段の日 " : " ふつうの日 ") + x.ids.join(",")));
-    ok(r.days.every((x, i) => i === 0 || x.tadan !== r.days[i-1].tadan), "2日に1回: 多段の日とふつうの日が交互");
-    ok(r.days.every(x => x.tadan ? x.ids.length === 3 && x.ids.every(id => /^r[78]d/.test(id)) : x.ids.length === 4 && x.ids.every(id => !/^r[78]d/.test(id))), "多段の日は多段3問だけ・ふつうの日は4問だけ");
+    r.days.forEach(x => console.log("  " + x.date + " " + x.kind + " " + x.ids.join(",")));
+    const seq = r.days.map(x => x.kind).join();
+    ok(r.days.every((x, i) => i < 3 || x.kind === r.days[i-3].kind) && new Set(r.days.slice(0, 3).map(x => x.kind)).size === 3, "3種類が3日ごとに回る", seq);
+    ok(r.days.every((x, i) => i === 0 || ["normal", "dan2", "dan3"].indexOf(x.kind) === (["normal", "dan2", "dan3"].indexOf(r.days[i-1].kind) + 1) % 3), "順は 1段 → 2段 → 3段以上", seq);
+    ok(r.days.every(x => x.kind === "normal" ? x.ids.length === 4 && x.dans.every(n => n === 1) : x.kind === "dan2" ? x.ids.length === 2 && x.dans.every(n => n === 2) && x.ids[0] !== x.ids[1] : x.ids.length === 1 && x.dans[0] === 3), "1段の日は4問（多段なし）・2段の日は2段2問・3段以上の日は1問", JSON.stringify(r.days.map(x => x.dans)));
     ok(r.days.every(x => x.same), "同じ日は何度でも同じ判定");
-    ok(r.c1 === 28 && r.c2 === 14 && r.c3 >= 9 && r.c3 <= 10 && r.c0 === 0 && r.dflt === 28, "間隔: 1=毎日／2=半分／3=3日に1回／0=なし／指定なし=毎日", JSON.stringify([r.c1, r.c2, r.c3, r.c0, r.dflt]));
-    ok(r.pc === 3 && r.pcd === 1, "planClean: day_every を読む（無ければ1＝毎日）");
+    ok(r.c1 === 18 && r.c2 === 18 && r.c0 === 0 && r.dflt === 18 && r.off === "normal", "day_every 0 と count 0 のときだけ多段の日なし／それ以外は27日中18日が多段の日", JSON.stringify([r.c1, r.c2, r.c0, r.dflt, r.off]));
+    ok(r.pc === 3 && r.pcd === 1 && r.pcc.count2 === 2 && r.pcc.count3 === 1 && r.pcc2.count2 === 3 && r.pcc2.count3 === 2, "planClean: day_every・count2・count3 を読む（無ければ 1・2・1）");
     await ctx.close();
-    // 実物: 多段の日（day_every=1）の紙は1問・A4 2ページ（問題1＋答え1）
-    mock.mode = "ok"; mock.plan = { units: [], count: 4, tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3, day_every: 1 } };
-    mock.files = {}; mock.log = [];
-    ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
-    page = await newPage(ctx);
-    await setCfg(page, { token: TOKEN, api: API, repo: "owner/repo" });
-    await page.reload();
-    await page.waitForFunction(() => /多段の日/.test(document.getElementById("daily-plan-note").textContent) || true);
-    await page.click("#daily-print-btn");
-    await page.waitForFunction(() => window.__printed === 1);
-    await page.waitForFunction(() => Array.from(document.querySelectorAll("#print-region img")).every(i => i.complete));
-    const dd = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
-    // 3日に1日（hashStr(日づけ)%3===0）は前の単元（第7回）をまぜる日。どちらの日かを同じ計算で決めてから見る（2026-10-24 まぜる日に鳴っていたのを直した）
-    const mixDay = await page.evaluate(() => hashStr(dayKeyOf(Date.now())) % 3 === 0);
-    ok(dd.sheets[0].ids.length === 3 && /^r8d/.test(dd.sheets[0].ids[0]) && /^r8d/.test(dd.sheets[0].ids[1]) && (mixDay ? /^r7d/ : /^r8d/).test(dd.sheets[0].ids[2]), "多段の日: 3問の紙ができた（3問目の3段以上は" + (mixDay ? "まぜる日なので第7回" : "今週の第8回") + "）", JSON.stringify(dd.sheets[0].ids));
-    await page.emulateMedia({ media: "print" });
-    await page.pdf({ path: path.join(OUT, "多段の日_見本.pdf"), format: "A4", printBackground: true, preferCSSPageSize: true });
-    const pp = (fs.readFileSync(path.join(OUT, "多段の日_見本.pdf")).toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
-    ok(pp >= 2 && pp <= 4, "多段3問の紙は A4 4ページまで", "ページ数 " + pp); console.log("  多段の日の紙のページ数: " + pp);
-    ok(/多段の日/.test(await page.evaluate(() => document.getElementById("daily-plan-note").textContent)) , "画面に「多段の日」の指定が出る");
-    await ctx.close();
+    // 実物: 2段の日・3段以上の日の紙（今の本番 plan の形）
+    mock.mode = "ok"; mock.plan = { units: [{ name: "ばね・浮力・圧力", count: 2 }, { name: "物の燃焼", count: 1 }, { name: "てこ", count: 1 }], exclude_levels: ["発展", "多段"], count: 4, tadan: { count: 1, main: "ばね・浮力・圧力", mix: "物の燃焼", mix_every: 3, day_every: 2 } };
+    for(const [kn, kind] of [[1, "dan2"], [2, "dan3"]]){
+      mock.files = {}; mock.log = [];
+      ctx = await browser.newContext({ viewport: { width: 794, height: 1123 } });
+      page = await newPage(ctx, { offset: offsetFor(kn) });
+      await setCfg(page, { token: TOKEN, api: API, repo: "owner/repo" });
+      await page.reload();
+      await page.click("#daily-print-btn");
+      await page.waitForFunction(() => window.__printed === 1);
+      await page.waitForFunction(() => Array.from(document.querySelectorAll("#print-region img")).every(i => i.complete));
+      const dd = await page.evaluate(() => JSON.parse(localStorage.getItem("keisan_daily_v1")));
+      const ids = dd.sheets[0].ids;
+      const dans = await page.evaluate(ids => ids.map(id => tadanDan(id)), ids);
+      const mixDay = await page.evaluate(() => hashStr(dayKeyOf(Date.now())) % 3 === 0);
+      if(kind === "dan2") ok(ids.length === 2 && dans.every(n => n === 2) && ids.every(id => /^r8d/.test(id)), "2段の日: 2段の多段2問だけの紙", JSON.stringify(ids));
+      else ok(ids.length === 1 && dans[0] === 3 && (mixDay ? /^r7d/ : /^r8d/).test(ids[0]), "3段以上の日: 3段以上の1問だけの紙（" + (mixDay ? "まぜる日なので第7回" : "今週の第8回") + "）", JSON.stringify(ids));
+      await page.emulateMedia({ media: "print" });
+      const pdfName = kind === "dan2" ? "2段の日_見本.pdf" : "3段以上の日_見本.pdf";
+      await page.pdf({ path: path.join(OUT, pdfName), format: "A4", printBackground: true, preferCSSPageSize: true });
+      const pp = (fs.readFileSync(path.join(OUT, pdfName)).toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
+      ok(pp >= 2 && pp <= (kind === "dan2" ? 4 : 2), pdfName + " のページ数", "ページ数 " + pp); console.log("  " + pdfName + " のページ数: " + pp);
+      ok(/日替わり/.test(await page.evaluate(() => document.getElementById("daily-plan-note").textContent)), "画面に「日替わり」の指定が出る");
+      await ctx.close();
+    }
   }
 
   await browser.close();
