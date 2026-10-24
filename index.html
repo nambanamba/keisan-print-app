@@ -885,7 +885,7 @@ function pickDaily(count, units, nowMs, daily, exclude, excludeLevels){
 // ---- 多段の1問（ふだんの数問とは別）----
 // plan.tadan = {count:1, main:"ばね・浮力・圧力", mix:"物の燃焼", mix_every:3}
 //   今週の単元(main)を中心に、mix_every 日に1日だけ前の単元(mix)をまぜる（日づけから決まるので、同じ日は同じ）。
-//   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → まだ → 7日以上前の◎ → 最近の◎。
+//   その単元に出せる問題が無ければ、ほかの多段から。選ぶ順は ✕ → △ → 出しどきの◎（3日・7日あけて、◎3回まで） → まだ → 7日以上前の◎ → 最近の◎。
 // 多段の日か？  日づけの通し番号を day_every で割った余りで決める（同じ日は何度作っても同じ・毎日ずれずに交互）。
 // day_every: 2 = 1日おき（既定）／3 = 3日に1回／1 = 毎日／0 = 多段の日なし
 function isTadanDay(tadan, nowMs){
@@ -895,6 +895,19 @@ function isTadanDay(tadan, nowMs){
   const d = new Date(nowMs || Date.now());
   const dn = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
   return dn % ev === 0;
+}
+// 日をあけて同じ多段を3回（2026-10-24 ユーザー決定「多段で解くものは計算プリントで定着」）
+//   いちど◎になった多段は、3日あけてもう一度、そのあと7日あけてもう一度出す（◎が3回つづいたら卒業＝前と同じ順）。
+//   ✕・△がついたら数えなおし（✕・△は rank 0・1 で先に出る）。記録は読むだけで、書き換えない。
+//   rank: 1.5 = 出しどき（✕・△のつぎ、まだ解いていない問より先）／5 = まだ早い／3 = 卒業して7日以上
+const TADAN_GAPS = [3, 7];   // 1回目の◎のあと3日、2回目の◎のあと7日
+function tadanReviewRank(h, nowMs){
+  const last = h[h.length-1];
+  let streak = 0;
+  for(let i = h.length-1; i >= 0 && h[i].r === "◎"; i--) streak++;
+  const days = (nowMs - last.t) / 86400000;
+  if(streak >= 1 && streak <= TADAN_GAPS.length) return days >= TADAN_GAPS[streak-1] - 0.5 ? 1.5 : 5;
+  return days >= 7 ? 3 : 5;
 }
 function pickTadan(tadan, nowMs, daily, exclude){
   daily = daily || dailyLoad();
@@ -913,7 +926,7 @@ function pickTadan(tadan, nowMs, daily, exclude){
     if(last && last.r === "✕") rank = 0;
     else if(last && last.r === "△") rank = 1;
     else if(!last) rank = 2;
-    else rank = (nowMs - last.t) >= 7*86400000 ? 3 : 5;
+    else rank = tadanReviewRank(h, nowMs);
     if(exclude && exclude.indexOf(d.id) >= 0) rank += 10;
     const inUnit = want && d.u.indexOf(want) >= 0;
     return { i: i, d: d, unit: inUnit ? 0 : 1, rank: rank, t: last ? last.t : 0, h: hashStr(dk + d.id) };
